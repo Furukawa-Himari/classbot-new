@@ -95,6 +95,7 @@ let conversationHistory = [];
 
             if (aiResponse) {
                 addMessageToLog("AI", aiResponse);
+                speak(aiResponse);
                 conversationHistory.push({ role: "assistant", content: aiResponse });
             } else {
                 addMessageToLog("AI", "すみません、うまく応答できませんでした。");
@@ -114,3 +115,19 @@ let conversationHistory = [];
         }
     }
 });
+document.addEventListener('DOMContentLoaded', () => {
+
+    //
+    // 日葵さんが元々書いていたコードが全部ここにあります
+    // (const chatLog = ... とか、sendMessageToOpenAI とか...)
+    //
+
+    // =============================================
+    // ★★★ここから音声会話プログラム★★★
+    // ★★★（この場所にお引越しさせる）★★★
+    // =============================================
+    const voiceButton = document.getElementById('voice-button');
+    // ...以下、音声会話のコードが続く...
+
+
+}); // ← この}); の内側に入っていればOKです！
