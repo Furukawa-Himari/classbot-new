@@ -114,20 +114,82 @@ let conversationHistory = [];
             }
         }
     }
+    // =============================================
+// ★★★ここから音声会話プログラム★★★
+// =============================================
+
+// --- 準備：HTMLの部品と、ブラウザの魔法を使えるようにする ---
+
+// HTMLから「マイクで話す」ボタンを探してきます
+const voiceButton = document.getElementById('voice-button');
+
+// ブラウザの「話を聞く魔法」を使えるように準備します
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+// もし魔法が使えないブラウザだったら、ボタンを隠してお知らせします
+if (!SpeechRecognition) {
+  voiceButton.style.display = 'none';
+  console.log('このブラウザは音声認識に対応していません。Google Chromeで試してください。');
+}
+
+// 「聞く魔法」の細かい設定（日本語で話すことを伝えます）
+const recognition = new SpeechRecognition();
+recognition.lang = 'ja-JP';
+
+// --- 呪文①：「話す魔法」を準備する ---
+// テキストを渡すと、それを音声で読み上げてくれる命令のかたまり（関数）です
+function speak(text) {
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'ja-JP';
+  window.speechSynthesis.speak(utterance);
+}
+
+// --- 呪文②：「聞く魔法」を使う ---
+
+// 「マイクで話す」ボタンがクリックされたら、聞く魔法(音声認識)を開始します
+voiceButton.addEventListener('click', () => {
+  // マイクの使用許可を求めるポップアップがブラウザに表示される場合があります。許可してください。
+  console.log('音声認識を開始します...');
+  recognition.start();
 });
-document.addEventListener('DOMContentLoaded', () => {
 
-    //
-    // 日葵さんが元々書いていたコードが全部ここにあります
-    // (const chatLog = ... とか、sendMessageToOpenAI とか...)
-    //
+// 話した声が、文字に変換されたら実行される処理です
+recognition.addEventListener('result', (event) => {
+  const spokenText = event.results[0][0].transcript;
+  console.log('認識されたテキスト:', spokenText);
 
-    // =============================================
-    // ★★★ここから音声会話プログラム★★★
-    // ★★★（この場所にお引越しさせる）★★★
-    // =============================================
-    const voiceButton = document.getElementById('voice-button');
-    // ...以下、音声会話のコードが続く...
+  // ★★★重要★★★
+  // ここで、日葵さんの既存のコードを使って、AIにメッセージを送ります。
+  // 例えば、入力欄に文字を入れてから送信ボタンを押す仕組みなら、以下のようにします。
 
+  // 1. あなたのHTMLにある入力欄を探してきます
+  const chatInput = document.getElementById('userInput'); // IDが`userInput`の場合
+  // 2. あなたのHTMLにある送信ボタンを探してきます
+  const sendButton = document.getElementById('sendButton'); // IDが`sendButton`の場合
 
-}); // ← この}); の内側に入っていればOKです！
+  // 3. 入力欄に、認識した音声テキストをセットします
+  chatInput.value = spokenText;
+  // 4. 送信ボタンをプログラムからクリックして、AIにメッセージを送ります
+  sendButton.click();
+});
+
+// 新しい「エラー探知機」の足跡
+recognition.onerror = (event) => {
+  console.error('★★★★★ エラー探知機が作動しました！ ★★★★★');
+  console.error('エラーの種類:', event.error);
+  console.error('エラーの詳細メッセージ:', event.message);
+};
+
+// 音声認識の様々な状態を監視する「足跡」を追加
+recognition.onstart = () => {
+  console.log('イベント足跡: onstart - 実際に音声認識が開始されました。マイクが起動しているはずです。');
+};
+
+recognition.onspeechend = () => {
+  console.log('イベント足跡: onspeechend - 話し声の終わりを検出しました。');
+};
+
+recognition.onend = () => {
+  console.log('イベント足跡: onend - 音声認識が終了しました。');
+};
+});
