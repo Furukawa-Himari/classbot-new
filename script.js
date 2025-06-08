@@ -9,6 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 会話の履歴を保持する配列
 let conversationHistory = [];
+// 会話の履歴を保持する配列
+let conversationHistory = [];
+// ★★★これを追加★★★
+let continueConversation = true; // 会話を続けるかどうかの旗（最初は「続ける(true)」）
 
     // 開始ボタンが押されたときの処理
     startButton.addEventListener('click', () => {
@@ -141,6 +145,23 @@ recognition.lang = 'ja-JP';
 function speak(text) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'ja-JP';
+
+  // ★★★ここから追加★★★
+  // AIが話し終わったときの処理を予約しておく
+  utterance.onend = () => {
+    // ★★★もし旗が「続ける(true)」の時だけ、マイクをオンにする★★★
+    if (continueConversation) {
+      console.log('AIの話が完了。次のマイク入力を待ちます...');
+      recognition.start(); 
+    } else {
+      console.log('会話が終了しました。');
+    }
+  };
+    // AIが話し終わったら、自動でマイクをオンにする
+    recognition.start(); 
+  };
+  // ★★★ここまで追加★★★
+
   window.speechSynthesis.speak(utterance);
 }
 
@@ -157,6 +178,23 @@ voiceButton.addEventListener('click', () => {
 recognition.addEventListener('result', (event) => {
   const spokenText = event.results[0][0].transcript;
   console.log('認識されたテキスト:', spokenText);
+
+  // ★★★ここから追加★★★
+  // もし話した言葉に「さようなら」が含まれていたら
+  if (spokenText.includes('さようなら')) {
+    console.log('「さようなら」が検出されたため、会話ループを停止します。');
+    continueConversation = false; // 旗を「続けない(false)」に倒す
+  } else {
+    continueConversation = true; // それ以外の言葉なら旗は「続ける(true)」のまま
+  }
+  // ★★★ここまで追加★★★
+
+  const chatInput = document.getElementById('userInput');
+  const sendButton = document.getElementById('sendButton');
+
+  chatInput.value = spokenText;
+  sendButton.click();
+});
 
   // ★★★重要★★★
   // ここで、日葵さんの既存のコードを使って、AIにメッセージを送ります。
