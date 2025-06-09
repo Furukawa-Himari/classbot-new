@@ -19,9 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'ja-JP';
         
-        // AIが話し終わったら、次の行動を決める
         utterance.onend = () => {
-            // もし「会話を続ける」の旗がONの時だけ、マイクを起動する
             if (continueConversation) {
                 console.log('AIの話が完了。次のマイク入力を待ちます...');
                 recognition.start();
@@ -34,15 +32,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- ④ イベント処理：ボタンが押されたら何をするか ---
-
-    // 「開始」ボタンの処理
     startButton.addEventListener('click', () => {
-        addMessageToLog("AI", "こんにちは！何かお話ししましょう。");
-        speak("こんにちは！何かお話ししましょう。"); // 開始メッセージも話すように追加
+        const startMessage = "こんにちは！これから国際関係やSDGsについて、みんなで探求学習を始めよう！";
+        addMessageToLog("AI", startMessage);
+        speak(startMessage);
+        conversationHistory.push({ role: "system", content: "あなたはクラスボットです。探求学習が始まりました。" });
+        conversationHistory.push({ role: "assistant", content: startMessage });
         startButton.disabled = true;
     });
 
-    // 「送信」ボタン（文字入力）の処理
     sendButton.addEventListener('click', () => {
         const userMessage = userInput.value.trim();
         if (userMessage) {
@@ -51,14 +49,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 「マイクで話す」ボタンの処理
     voiceButton.addEventListener('click', () => {
-        continueConversation = true; // マイクボタンが押されたら、必ず会話を再開する
+        continueConversation = true;
         console.log('音声認識を開始します...');
         recognition.start();
     });
 
-    // Enterキーでも送信
     userInput.addEventListener('keypress', (event) => {
         if (event.key === 'Enter') {
             sendButton.click();
@@ -66,27 +62,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- ⑤ 音声認識のイベント処理 ---
-
-    // 声が文字に変換されたら
     recognition.addEventListener('result', (event) => {
         const spokenText = event.results[0][0].transcript;
         handleUserMessage(spokenText);
     });
     
-    // 音声認識でエラーが起きたら
     recognition.onerror = (event) => {
         console.error('音声認識エラー:', event.error, event.message);
+        addMessageToLog("AI", `ごめんなさい、マイクでエラーが起きたみたいです: ${event.error}`);
     };
 
-
     // --- ⑥ 共通の処理をまとめた関数 ---
-
-    // ユーザーからのメッセージを処理する関数
     function handleUserMessage(message) {
         addMessageToLog("あなた", message);
         conversationHistory.push({ role: "user", content: message });
         
-        // 「さようなら」チェック
         if (message.includes('さようなら')) {
             continueConversation = false;
         } else {
@@ -96,19 +86,20 @@ document.addEventListener('DOMContentLoaded', () => {
         sendMessageToOpenAI();
     }
 
-    // チャットログにメッセージを追加する関数
     function addMessageToLog(sender, message) {
         const messageElement = document.createElement('div');
         messageElement.classList.add('message', sender.toLowerCase());
-        messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
+        messageElement.innerHTML = `<strong>${sender}:</strong> `;
+        
+        const messageText = document.createTextNode(message); // XSS対策
+        messageElement.appendChild(messageText);
+
         chatLog.appendChild(messageElement);
         chatLog.scrollTop = chatLog.scrollHeight;
+        return messageElement;
     }
 
-    // OpenAI APIにメッセージを送信する関数
     async function sendMessageToOpenAI() {
-        // ... (この関数の中身は日葵さんの元のコードとほぼ同じなので省略) ...
-        // ... 正しく動いていたので、変更の必要はありません！ ...
         const thinkingMessage = addMessageToLog("AI", "考え中...");
         try {
             const response = await fetch('/api/chat', {
@@ -121,19 +112,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.message);
+                throw new Error(errorData.message || `Status ${response.status}`);
             }
             const data = await response.json();
             const aiResponse = data.message;
             if (aiResponse) {
                 addMessageToLog("AI", aiResponse);
-                speak(aiResponse);
                 conversationHistory.push({ role: "assistant", content: aiResponse });
+                speak(aiResponse);
             }
         } catch (error) {
             console.error('API Error:', error);
-            addMessageToLog("AI", `エラーが発生しました: ${error.message}`);
             if(thinkingMessage) thinkingMessage.remove();
+            addMessageToLog("AI", `エラーが発生しました: ${error.message}`);
         }
     }
 });

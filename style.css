@@ -1,64 +1,114 @@
+/* 基本的なスタイル */
 body {
-    font-family: sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f4f7f6;
+    margin: 0;
+    padding: 20px;
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    margin: 0;
-    background-color: #f0f0f0;
+    box-sizing: border-box;
 }
 
+/* チャット全体のコンテナ */
 #chat-container {
-    width: 80%;
+    width: 100%;
     max-width: 600px;
-    background-color: white;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    height: 80vh;
+    background-color: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     display: flex;
     flex-direction: column;
-    height: 80vh; /* ビューポートの高さの80% */
+    overflow: hidden;
 }
 
+/* 会話ログのエリア */
 #chat-log {
     flex-grow: 1;
+    padding: 20px;
+    overflow-y: auto;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+/* 各メッセージのスタイル */
+.message {
+    margin-bottom: 15px;
+    padding: 10px 15px;
+    border-radius: 18px;
+    max-width: 80%;
+    line-height: 1.5;
+}
+
+.message strong {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+/* ユーザーのメッセージ（右寄せ） */
+.message.あなた {
+    background-color: #007bff;
+    color: white;
+    margin-left: auto;
+    border-bottom-right-radius: 4px;
+}
+
+/* AIのメッセージ（左寄せ） */
+.message.ai {
+    background-color: #e9ecef;
+    color: #333;
+    margin-right: auto;
+    border-bottom-left-radius: 4px;
+}
+
+/* 入力欄とボタンのコンテナ */
+#input-container {
+    display: flex;
     padding: 15px;
-    overflow-y: auto; /* メッセージが増えたらスクロールできるように */
-    border-bottom: 1px solid #eee;
+    gap: 10px;
 }
-
-#chat-log .message {
-    margin-bottom: 10px;
-    padding: 8px 12px;
-    border-radius: 5px;
-    line-height: 1.4;
-}
-#chat-log .user { /* あなたのメッセージ */
-    background-color: #dcf8c6;
-    align-self: flex-end; /* 右寄せにするイメージ */
-    margin-left: auto; /* これで右寄せ */
-    text-align: right;
-}
-#chat-log .ai { /* AIのメッセージ */
-    background-color: #f1f0f0;
-    align-self: flex-start; /* 左寄せにするイメージ */
-}
-
 
 #userInput {
-    padding: 10px;
-    border: none;
-    border-top: 1px solid #eee;
-    flex-shrink: 0; /* コンテナが縮んでも入力欄の高さは維持 */
+    flex-grow: 1;
+    border: 1px solid #ccc;
+    border-radius: 20px;
+    padding: 10px 15px;
+    font-size: 16px;
 }
 
-#sendButton, #startButton {
-    padding: 10px 15px;
+/* ボタン共通のスタイル */
+button {
     background-color: #007bff;
     color: white;
     border: none;
+    padding: 10px 20px;
+    border-radius: 20px;
     cursor: pointer;
-    flex-shrink: 0;
+    font-size: 16px;
+    font-weight: 500;
+    transition: background-color 0.2s;
 }
-#sendButton:hover, #startButton:hover {
+
+button:hover {
     background-color: #0056b3;
+}
+
+button:disabled {
+    background-color: #a0a0a0;
+    cursor: not-allowed;
+}
+
+/* 開始ボタンなどを置くエリア */
+#controls-container {
+    padding: 0 15px 15px 15px;
+}
+
+#startButton {
+    width: 100%;
+    background-color: #28a745;
+}
+#startButton:hover {
+    background-color: #218838;
 }
