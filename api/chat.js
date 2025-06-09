@@ -1,5 +1,18 @@
-// api/chat.js
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
+// Firebase Admin SDKの初期化（これは一度だけ行われる）
+// process.env.FIREBASE_SERVICE_ACCOUNT は、後でVercelに設定する新しい秘密の鍵です
+if (!getApps().length) {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  initializeApp({
+    credential: cert(serviceAccount)
+  });
+}
+
+const db = getFirestore();
+
+// ここからがAPIの本体
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
@@ -64,7 +77,23 @@ export default async function handler(req, res) {
     const aiResponse = data.choices[0]?.message?.content.trim();
 
     if (aiResponse) {
-      res.status(200).json({ message: aiResponse });
+      // 会話をFirestoreに保存する処理
+      try {
+        const docRef = await db.collection('chats').add({
+          userInput: conversationHistory.slice(-1)[0].content,
+          aiOutput: aiResponse,
+          timestamp: new Date()
+        });
+        console.log('会話をFirestoreに保存しました。ドキュメントID:', docRef.id);
+      } catch (dbError) {
+        console.error('Firestoreへの保存中にエラーが発生しました:', dbError);
+        // データベースへの保存が失敗しても、ユーザーとの会話は続ける
+      }
+
+  // フロントエンドにAIの返事を返す
+      const modifiedResponse = aiResponse + " (テストV2)";
+      res.status(200).json({ message: modifiedResponse });
+
     } else {
       res.status(500).json({ message: 'No response from AI' });
     }
