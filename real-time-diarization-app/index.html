@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Conversation Diarization</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Custom styles for the app */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Style for the transcript output */
+        .speaker-bubble {
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 flex flex-col items-center justify-center min-h-screen p-4 transition-colors duration-500">
+
+    <div class="w-full max-w-2xl bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 md:p-8 space-y-6">
+        <!-- Header -->
+        <div class="text-center">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Conversation Diarizer</h1>
+            <p class="text-gray-500 dark:text-gray-400 mt-1">Click the microphone to start recording and transcribing.</p>
+        </div>
+
+        <!-- Recording Control & Status -->
+        <div class="flex flex-col items-center justify-center space-y-4">
+            <button id="recordButton" class="w-20 h-20 rounded-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white transition-all duration-300 ease-in-out shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-300 dark:focus:ring-blue-800">
+                <!-- Microphone Icon -->
+                <svg id="micIcon" class="w-10 h-10" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"></path>
+                    <path d="M17 11h-1c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92z"></path>
+                </svg>
+                 <!-- Stop Icon (hidden by default) -->
+                <svg id="stopIcon" class="w-8 h-8 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 6h12v12H6z"></path>
+                </svg>
+            </button>
+            <p id="status" class="text-sm font-medium text-gray-600 dark:text-gray-400 h-5">Ready to record</p>
+        </div>
+        
+        <!-- Transcript Display Area -->
+        <div id="transcriptContainer" class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 h-96 overflow-y-auto space-y-4">
+            <!-- Transcript entries will be added here -->
+        </div>
+
+    </div>
+
+    <!-- Azure Speech SDK -->
+    <script src="https://aka.ms/csspeech/js/latest/speech-sdk.js"></script>
+
+    <!-- Application Logic -->
+    <script type="module">
+        // --- DOM Element References ---
+        const recordButton = document.getElementById('recordButton');
+        const micIcon = document.getElementById('micIcon');
+        const stopIcon = document.getElementById('stopIcon');
+        const statusEl = document.getElementById('status');
+        const transcriptContainer = document.getElementById('transcriptContainer');
+
+        // --- Application State ---
+        let recognizer = null;
+        let isRecording = false;
+        // Store conversation data: { speakerId: [{ text, offset }] }
+        let conversationData = new Map(); 
+
+        // --- Azure Credentials (from .env.local or Vercel) ---
+        // Vite exposes env variables on this special object
+        const speechKey = import.meta.env.VITE_SPEECH_KEY;
+        const speechRegion = import.meta.env.VITE_SPEECH_REGION;
+
+        if (!speechKey || !speechRegion) {
+            updateStatus("ERROR: Speech key or region not found. Please check your environment variables.", true);
+            recordButton.disabled = true;
+        }
+
+        /**
+         * Updates the UI to reflect the current recording state.
+         * @param {boolean} recording - True if recording, false otherwise.
+         */
+        function updateUIVisuals(recording) {
+            isRecording = recording;
+            recordButton.classList.toggle('bg-red-600', recording);
+            recordButton.classList.toggle('hover:bg-red-700', recording);
+            recordButton.classList.toggle('bg-blue-600', !recording);
+            recordButton.classList.toggle('hover:bg-blue-700', !recording);
+
+            micIcon.classList.toggle('hidden', recording);
+            stopIcon.classList.toggle('hidden', !recording);
+        }
+
+        /**
+         * Updates the status message text and color.
+         * @param {string} text - The message to display.
+         * @param {boolean} isError - If true, displays the text in red.
+         */
+        function updateStatus(text, isError = false) {
+            statusEl.textContent = text;
+            statusEl.classList.toggle('text-red-500', isError);
+            statusEl.classList.toggle('text-gray-600', !isError);
+            statusEl.classList.toggle('dark:text-gray-400', !isError);
+        }
+        
+        /**
+         * Renders the entire conversation transcript from the conversationData map.
+         */
+        function renderTranscript() {
+            transcriptContainer.innerHTML = ''; // Clear previous content
+
+            // Sort speakers for consistent order, e.g., Speaker 1, Speaker 2, etc.
+            const sortedSpeakers = [...conversationData.keys()].sort();
+
+            for (const speakerId of sortedSpeakers) {
+                const utterances = conversationData.get(speakerId);
+                const combinedText = utterances.map(u => u.text).join(' ');
+
+                const speakerDiv = document.createElement('div');
+                speakerDiv.className = 'flex flex-col';
+                
+                // Align speaker bubbles, e.g., even speakers on the right.
+                const speakerNum = parseInt(speakerId.split(' ')[1]);
+                speakerDiv.classList.add(speakerNum % 2 === 0 ? 'items-end' : 'items-start');
+
+                speakerDiv.innerHTML = `
+                    <div class="speaker-bubble rounded-xl p-3 ${speakerNum % 2 === 0 ? 'bg-blue-100 dark:bg-blue-900/60' : 'bg-gray-200 dark:bg-gray-600/60'}">
+                        <p class="font-bold text-sm text-blue-800 dark:text-blue-300 mb-1">${speakerId}</p>
+                        <p class="text-gray-800 dark:text-gray-200">${combinedText}</p>
+                    </div>
+                `;
+                transcriptContainer.appendChild(speakerDiv);
+            }
+            
+            // Scroll to the bottom
+            transcriptContainer.scrollTop = transcriptContainer.scrollHeight;
+        }
+
+        /**
+         * Initializes and starts the conversation transcription.
+         */
+        async function startDiarization() {
+            if (isRecording) return;
+            
+            updateUIVisuals(true);
+            updateStatus("Connecting to service...");
+
+            const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(speechKey, speechRegion);
+            speechConfig.speechRecognitionLanguage = "en-US"; // Set your language
+
+            // Use the default microphone as the audio source.
+            const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+            
+            // Create the ConversationTranscriber
+            recognizer = new SpeechSDK.ConversationTranscriber(speechConfig, audioConfig);
+            conversationData.clear(); // Clear previous conversation data
+            transcriptContainer.innerHTML = ''; // Clear UI
+            
+            // --- Event Handlers for the Transcriber ---
+
+            recognizer.sessionStarted = (s, e) => {
+                updateStatus("Listening... Speak into your microphone.");
+            };
+
+            recognizer.sessionStopped = (s, e) => {
+                updateStatus("Processing final results...");
+                stopDiarization();
+            };
+
+            recognizer.canceled = (s, e) => {
+                let errorMessage = `CANCELED: Reason=${e.reason}`;
+                if (e.reason === SpeechSDK.CancellationReason.Error) {
+                    errorMessage += ` | ErrorCode=${e.errorCode} | ErrorDetails=${e.errorDetails}`;
+                }
+                updateStatus(errorMessage, true);
+                stopDiarization();
+            };
+            
+            // The 'transcribed' event is fired for every segment of speech.
+            // This is where we get the diarization result.
+            recognizer.transcribed = (s, e) => {
+                const result = e.result;
+                if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+                    const speakerId = result.speakerId === 'Unidentified' ? 'Unidentified' : `Speaker ${result.speakerId}`;
+                    const utterance = { text: result.text, offset: result.offset };
+                    
+                    if (conversationData.has(speakerId)) {
+                        conversationData.get(speakerId).push(utterance);
+                    } else {
+                        conversationData.set(speakerId, [utterance]);
+                    }
+                    
+                    // Update the UI with the latest state of the conversation
+                    renderTranscript();
+                }
+            };
+
+            // Start the transcription process.
+            recognizer.startTranscribingAsync(
+                () => {}, // successfully started
+                (err) => {
+                    updateStatus(`ERROR: ${err}`, true);
+                    stopDiarization();
+                }
+            );
+        }
+
+        /**
+         * Stops the conversation transcription.
+         */
+        function stopDiarization() {
+            if (!isRecording || !recognizer) return;
+            
+            recognizer.stopTranscribingAsync(
+                () => {
+                    recognizer.close();
+                    recognizer = null;
+                    updateUIVisuals(false);
+                    updateStatus("Recording stopped. Final transcript below.");
+                    if(conversationData.size === 0) {
+                       updateStatus("No speech was detected.");
+                       transcriptContainer.innerHTML = `<p class="text-center text-gray-500 dark:text-gray-400">Try speaking again after starting the recording.</p>`;
+                    }
+                },
+                (err) => {
+                    console.error("Error stopping recognizer:", err);
+                    updateUIVisuals(false);
+                    updateStatus(`ERROR stopping: ${err}`, true);
+                }
+            );
+        }
+
+        // --- Main Event Listener ---
+        recordButton.addEventListener('click', () => {
+            if (!isRecording) {
+                startDiarization();
+            } else {
+                stopDiarization();
+            }
+        });
+
+    </script>
+</body>
+</html>
