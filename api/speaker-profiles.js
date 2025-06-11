@@ -5,7 +5,7 @@
 
 // We use 'node-fetch' for making HTTP requests to the Azure API.
 // In Vercel's Node.js environment, you need to use a library like this.
-import fetch from 'node-fetch';
+const fetch = require('node-fetch');
 
 // --- CONFIGURATION ---
 // These are loaded from the Environment Variables you set in Vercel.
