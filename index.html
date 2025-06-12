@@ -10,8 +10,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- 作成したCSSファイルを読み込み -->
-    <link rel="stylesheet" href="styles.css">
+    <!-- ★修正点1: 正しいCSSファイル名 `style.css` を読み込み -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -60,10 +60,8 @@
     <!-- Azure Speech SDK -->
     <script src="https://aka.ms/csspeech/js/latest/speech-sdk.js"></script>
 
-    <!-- アプリケーションのロジック -->
+    <!-- ★修正点2: 全てのJavaScriptコードを1つのscriptタグの中に入れる -->
     <script type="module" defer>
-    // ...
-</script>
         // --- DOM要素の参照 ---
         const recordButton = document.getElementById('recordButton');
         const micIcon = document.getElementById('micIcon');
@@ -79,20 +77,17 @@
         let recognizer = null;
         let isRecording = false;
         let conversationData = new Map();
-        let speakerProfiles = new Map(); // profileId をスピーカー名にマッピング
-        let speakerOrder = []; // スピーカーの表示順を管理
+        let speakerProfiles = new Map();
+        let speakerOrder = [];
 
         // --- Azureの認証情報 ---
-        // Viteを使っていないため、これらの値は直接設定するか、
-        // 安全な方法（サーバーから取得するなど）で読み込む必要があります。
-        // ここではデモ用に仮の値を設定します。
-        // 必ずVercelの環境変数で設定した実際の値に置き換えてください。
-        const speechKey = "2EGwVWHaUbiKOCmoRVHtS9gkntofNcKpn97g8hTDrYHmGqYRWnq0JQQJ99BFACi0881XJ3w3AAAYACOGSP1t"; 
-        const speechRegion = "japaneast";
+        // ★修正点3: ここにあなたの実際のキーとリージョンを設定してください
+        const speechKey = "YOUR_AZURE_SPEECH_KEY";
+        const speechRegion = "YOUR_AZURE_REGION";
 
-        // Viteの`import.meta.env`は使えないので、直接グローバルスコープから参照
-        if (!speechKey || !speechRegion || speechKey === "6EBCCkLWMiNWTx7zPypkvhhpaoY21nFt8Kdv51Ds1NBcQACCLX2uJQQJ99BFACi0881XJ3w3AAAYACOGSvBH") {
-            updateStatus("japaneast", true);
+        // 認証情報が設定されているか確認する
+        if (!speechKey || !speechRegion || speechKey === "YOUR_AZURE_SPEECH_KEY") {
+            updateStatus("エラー: HTMLファイルにAzureのKeyとRegionが設定されていません。", true);
             recordButton.disabled = true;
         }
 
@@ -108,7 +103,6 @@
             addSpeakerButton.innerHTML = '<div class="spinner"></div>';
 
             try {
-                // サーバーレス関数を呼び出してプロファイルを作成
                 const response = await fetch('/api/speaker-profiles', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -128,8 +122,8 @@
                 console.error("スピーカーの追加エラー:", error);
                 alert(`スピーカーの追加に失敗しました: ${error.message}`);
             } finally {
-                 addSpeakerButton.disabled = false;
-                 addSpeakerButton.textContent = '追加';
+                addSpeakerButton.disabled = false;
+                addSpeakerButton.textContent = '追加';
             }
         });
 
@@ -159,16 +153,13 @@
                 enrollmentStatus.textContent = `「${speakerName}」さんを登録中...「Hey Cortana, what's the weather like?」と読み上げてください。`;
                 
                 try {
-                    // 登録用に5秒間音声を録音
                     const audioBlob = await recordAudio(5000); 
                     
-                    // サーバーレス関数に音声を送信して登録
                     const response = await fetch(`/api/speaker-profiles`, {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/octet-stream',
-                            // `req.body`がストリームとして扱われるため、カスタムヘッダーでIDを渡す
-                            'X-Profile-Id': profileId 
+                            'X-Profile-Id': profileId
                         },
                         body: audioBlob
                     });
@@ -185,7 +176,6 @@
                 } catch (error) {
                     console.error('登録失敗:', error);
                     enrollmentStatus.textContent = `登録に失敗しました: ${error.message}`;
-                    // 失敗した場合はボタンを元に戻す
                     button.disabled = false;
                     button.textContent = '声を登録';
                 }
@@ -193,8 +183,11 @@
         });
 
         function recordAudio(duration) {
-             return new Promise(async (resolve, reject) => {
+            return new Promise(async (resolve, reject) => {
                 try {
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        throw new Error('マイク機能がこのブラウザではサポートされていません。');
+                    }
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     const mediaRecorder = new MediaRecorder(stream);
                     const audioChunks = [];
@@ -233,7 +226,7 @@
             updateStatus("サービスに接続中...");
 
             const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(speechKey, speechRegion);
-            speechConfig.speechRecognitionLanguage = "ja-JP"; // 日本語に設定
+            speechConfig.speechRecognitionLanguage = "ja-JP";
 
             const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
             
@@ -242,7 +235,6 @@
             speakerOrder = [];
             transcriptContainer.innerHTML = '';
             
-            // 登録済みのスピーカーからVoiceProfileを作成
             const enrolledProfiles = [];
             for(const [profileId, profile] of speakerProfiles.entries()){
                 if(profile.enrolled){
@@ -251,12 +243,10 @@
                 }
             }
             
-            // 作成したVoiceProfileを認識エンジンに追加
             if (enrolledProfiles.length > 0) {
                 const speakerIdentificationModel = SpeechSDK.SpeakerIdentificationModel.fromVoiceProfiles(enrolledProfiles);
                 await recognizer.addSpeakerIdentificationModelAsync(speakerIdentificationModel);
             }
-
 
             recognizer.sessionStarted = (s, e) => updateStatus("マイクに向かって話してください...");
             recognizer.sessionStopped = (s, e) => {
@@ -264,14 +254,17 @@
                 stopDiarization();
             };
             recognizer.canceled = (s, e) => {
-                updateStatus(`キャンセルされました: ${e.errorDetails}`, true);
+                let errorMessage = `キャンセルされました: ${e.reason}`;
+                if (e.reason === SpeechSDK.CancellationReason.Error) {
+                    errorMessage += ` | ErrorCode=${e.errorCode} | ErrorDetails=${e.errorDetails}`;
+                }
+                updateStatus(errorMessage, true);
                 stopDiarization();
             };
             
             recognizer.transcribed = (s, e) => {
                 const result = e.result;
                 if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech && result.text) {
-                    // profileIdからスピーカー名を取得
                     const profile = speakerProfiles.get(result.speakerId);
                     const speakerName = profile ? profile.name : `スピーカー ${result.speakerId}`;
                     
@@ -281,7 +274,7 @@
                         conversationData.get(speakerName).push(utterance);
                     } else {
                         conversationData.set(speakerName, [utterance]);
-                        speakerOrder.push(speakerName); // 新しいスピーカーを順序リストに追加
+                        speakerOrder.push(speakerName);
                     }
                     renderTranscript();
                 }
@@ -294,14 +287,14 @@
         }
 
         function stopDiarization() {
-             if (!recognizer) return;
+            if (!recognizer) return;
             
             recognizer.stopTranscribingAsync(
                 () => {
                     recognizer.close();
                     recognizer = null;
                     updateUIVisuals(false);
-                    updateStatus("録音を停止しました。最終的な文字起こし結果はこちらです。");
+                    updateStatus("録音を停止しました。");
                 },
                 (err) => {
                     console.error("認識エンジンの停止エラー:", err);
@@ -314,14 +307,12 @@
         function renderTranscript() {
             transcriptContainer.innerHTML = '';
             
-            // 最初に話した人から順番に表示
             for (const speakerName of speakerOrder) {
                 if (!conversationData.has(speakerName)) continue;
 
                 const utterances = conversationData.get(speakerName);
                 const combinedText = utterances.map(u => u.text).join(' ');
 
-                // speakerOrderでのインデックスが偶数か奇数かで左右を決定
                 const alignClass = speakerOrder.indexOf(speakerName) % 2 === 0 ? 'align-left' : 'align-right';
 
                 const bubbleContainer = document.createElement('div');
@@ -340,7 +331,6 @@
 
         function updateUIVisuals(recording) {
             isRecording = recording;
-            // CSSクラスの付け外しでスタイルを変更
             recordButton.classList.toggle('recording', recording);
             micIcon.classList.toggle('hidden', recording);
             stopIcon.classList.toggle('hidden', !recording);
@@ -365,3 +355,12 @@
     </script>
 </body>
 </html>
+```
+
+### 次のステップ
+
+1.  上記の新しいコードで、あなたの`index.html`ファイルの内容を**完全に置き換えてください。**
+2.  **【最重要】** `YOUR_AZURE_SPEECH_KEY`と`YOUR_AZURE_REGION`の部分を、あなたの**正しいAzureのキーとリージョン**に書き換えてください。
+3.  ファイルを保存し、ターミナルで `git add .`, `git commit -m "Fix critical errors in index.html"`, `git push origin main` を実行して、変更をデプロイしてください。
+
+これで、HTMLの構文エラーと認証情報の間違いが両方修正されるため、`Resource not found`エラーが解決に向かうはず
