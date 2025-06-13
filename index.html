@@ -173,7 +173,7 @@
                     <path d="M6 6h12v12H6z"></path>
                 </svg>
             </button>
-            <p id="status">認証中...</p>
+            <p id="status">初期化中...</p>
         </div>
         
         <div id="transcriptContainer" class="transcript-container">
@@ -204,15 +204,31 @@
         let speakerOrder = [];
         let speechConfig = null;
 
-        // ★★★ 修正点: アプリケーションのメインロジックを関数でラップ ★★★
-        async function main() {
-            // イベントリスナーをこの関数内で設定
-            addSpeakerButton.addEventListener('click', handleAddSpeaker);
-            speakerList.addEventListener('click', handleEnrollmentClick);
-            recordButton.addEventListener('click', handleRecordButtonClick);
-
+        // ★★★ 修正点: SDKがロードされるまでポーリングする関数 ★★★
+        function waitForSDK() {
+            return new Promise((resolve, reject) => {
+                let retries = 0;
+                const interval = setInterval(() => {
+                    if (typeof SpeechSDK !== "undefined") {
+                        clearInterval(interval);
+                        resolve();
+                    }
+                    retries++;
+                    if (retries > 50) { // タイムアウト (5秒)
+                        clearInterval(interval);
+                        reject(new Error("SpeechSDK failed to load in 5 seconds. Check network or script URL."));
+                    }
+                }, 100);
+            });
+        }
+        
+        // ★★★ 修正点: 初期化ロジックを更新 ★★★
+        async function initializeApp() {
             try {
-                // サーバーから認証トークンを取得
+                updateStatus("SDKを待機中...", false);
+                await waitForSDK();
+                
+                updateStatus("認証中...", false);
                 const response = await fetch('/api/get-speech-token');
                 if (!response.ok) {
                     const err = await response.json();
@@ -220,17 +236,18 @@
                 }
                 const { token, region } = await response.json();
 
-                // SpeechSDKオブジェクトが利用可能であることを確認
-                if (typeof SpeechSDK === "undefined") {
-                    throw new Error("SpeechSDK is not loaded yet. Please check network connection to aka.ms.");
-                }
-
-                // サブスクリプションキーの代わりに認証トークンを使用
                 speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
                 speechConfig.speechRecognitionLanguage = "ja-JP";
 
+                // イベントリスナーをSDKのロード成功後に設定
+                addSpeakerButton.addEventListener('click', handleAddSpeaker);
+                speakerList.addEventListener('click', handleEnrollmentClick);
+                recordButton.addEventListener('click', handleRecordButtonClick);
+
                 updateStatus("録音準備完了", false);
                 recordButton.disabled = false;
+                addSpeakerButton.disabled = false;
+
             } catch (error) {
                 console.error("Initialization Error:", error);
                 updateStatus(`エラー: 初期化に失敗しました。 ${error.message}`, true);
@@ -239,9 +256,8 @@
             }
         }
 
-        // ★★★ 修正点: ページのすべてのリソースが読み込まれた後にmain()を実行 ★★★
-        window.onload = main;
-
+        // アプリケーションの初期化を開始
+        initializeApp();
 
         // --- イベントハンドラ関数 ---
         async function handleAddSpeaker() {
