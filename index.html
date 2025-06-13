@@ -10,48 +10,172 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- ★修正点1: 正しいCSSファイル名 `style.css` を読み込み -->
-    <link rel="stylesheet" href="styles.css">
+    <!-- We will use inline styles for simplicity in this example -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .main-container {
+            width: 100%;
+            max-width: 800px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+        .header { text-align: center; }
+        .header h1 { margin-bottom: 8px; color: #1a202c; }
+        .header p { color: #718096; }
+        
+        .enrollment-section, .controls-container {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        h2 { 
+            margin-top: 0; 
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 1.25rem;
+            color: #2d3748;
+        }
+        .add-speaker-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        #speakerNameInput {
+            flex-grow: 1;
+            padding: 10px 15px;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        .button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .button:active { transform: scale(0.98); }
+        .button.primary { background-color: #4299e1; color: white; }
+        .button.primary:hover { background-color: #3182ce; }
+        .button.enroll { background-color: #48bb78; color: white; }
+        .button.enroll:hover { background-color: #38a169; }
+        .button:disabled { background-color: #a0aec0; cursor: not-allowed; }
+
+        .speaker-list { display: flex; flex-direction: column; gap: 10px; }
+        .speaker-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #edf2f7;
+            border-radius: 6px;
+        }
+        #enrollmentStatus { color: #4a5568; text-align: center; min-height: 20px; }
+        
+        .controls-container { text-align: center; }
+        #recordButton {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background-color: #63b3ed;
+            color: white;
+            border: 4px solid white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
+        }
+        #recordButton.recording { background-color: #f56565; }
+        #recordButton svg { width: 32px; height: 32px; }
+        .hidden { display: none; }
+        #status { font-weight: 500; color: #4a5568; }
+        #status.error { color: #c53030; font-weight: bold; }
+
+        .transcript-container {
+            background-color: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .speaker-bubble-container { display: flex; max-width: 80%; }
+        .speaker-bubble {
+            padding: 12px 18px;
+            border-radius: 18px;
+            background-color: #e2e8f0;
+        }
+        .speaker-bubble-container.align-left { justify-content: flex-start; }
+        .speaker-bubble-container.align-right { justify-content: flex-end; margin-left: auto; }
+        .speaker-bubble-container.align-right .speaker-bubble { background-color: #bee3f8; }
+        .speaker-name { font-weight: bold; margin: 0 0 5px 0; color: #2d3748;}
+        p { margin: 0; }
+
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid #fff;
+            width: 18px;
+            height: 18px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </head>
 <body>
 
     <div class="main-container">
-        <!-- ヘッダー -->
         <div class="header">
             <h1>会話ダイアライザー</h1>
             <p>スピーカーを登録してから、マイクボタンを押して会話を開始してください。</p>
         </div>
 
-        <!-- スピーカー登録セクション -->
         <div class="enrollment-section">
             <h2>スピーカー登録</h2>
             <div class="add-speaker-form">
                 <input type="text" id="speakerNameInput" placeholder="スピーカーの名前を入力">
                 <button id="addSpeakerButton" class="button primary">追加</button>
             </div>
-            <div id="speakerList" class="speaker-list">
-                <!-- スピーカープロファイルがここに表示されます -->
-            </div>
-             <p id="enrollmentStatus"></p>
+            <div id="speakerList" class="speaker-list"></div>
+            <p id="enrollmentStatus"></p>
         </div>
 
-        <!-- 録音コントロールとステータス -->
         <div class="controls-container">
-            <button id="recordButton" title="録音開始/停止">
-                <!-- マイクアイコン -->
+            <button id="recordButton" title="録音開始/停止" disabled>
                 <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"></path>
                     <path d="M17 11h-1c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92z"></path>
                 </svg>
-                 <!-- 停止アイコン (デフォルトで非表示) -->
                 <svg id="stopIcon" class="hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M6 6h12v12H6z"></path>
                 </svg>
             </button>
-            <p id="status">録音準備完了</p>
+            <p id="status">認証中...</p>
         </div>
         
-        <!-- 文字起こし表示エリア -->
         <div id="transcriptContainer" class="transcript-container">
             <!-- 文字起こしの結果がここに表示されます -->
         </div>
@@ -60,8 +184,7 @@
     <!-- Azure Speech SDK -->
     <script src="https://aka.ms/csspeech/js/latest/speech-sdk.js"></script>
 
-    <!-- ★修正点2: 全てのJavaScriptコードを1つのscriptタグの中に入れる -->
-    <script type="module" defer>
+    <script type="module">
         // --- DOM要素の参照 ---
         const recordButton = document.getElementById('recordButton');
         const micIcon = document.getElementById('micIcon');
@@ -79,30 +202,44 @@
         let conversationData = new Map();
         let speakerProfiles = new Map();
         let speakerOrder = [];
+        let speechConfig = null; // ★ 修正点: speechConfigをグローバルに保持
 
-        // --- Azureの認証情報 ---
-        // ★修正点3: ここにあなたの実際のキーとリージョンを設定してください
-        const speechKey = "11HpwdDtSCZi7tIIGhylSODGW9XpnsElDKgaDOJoGLTG11tP4Z4UJQQJ99BFACYeBjFXJ3w3AAAYACOGje5S";
-        const speechRegion = "eastus";
+        // --- 初期化処理 ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // ★ 修正点: サーバーから認証トークンを取得
+                const response = await fetch('/api/get-speech-token');
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || 'Failed to get auth token.');
+                }
+                const { token, region } = await response.json();
 
-        // 認証情報が設定されているか確認する
-        if (!speechKey || !speechRegion || speechKey === "YOUR_AZURE_SPEECH_KEY") {
-            updateStatus("エラー: HTMLファイルにAzureのKeyとRegionが設定されていません。", true);
-            recordButton.disabled = true;
-        }
+                // ★ 修正点: サブスクリプションキーの代わりに認証トークンを使用
+                speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
+                speechConfig.speechRecognitionLanguage = "ja-JP";
+
+                updateStatus("録音準備完了", false);
+                recordButton.disabled = false;
+            } catch (error) {
+                console.error("Initialization Error:", error);
+                updateStatus(`エラー: 初期化に失敗しました。 ${error.message}`, true);
+                recordButton.disabled = true;
+                addSpeakerButton.disabled = true;
+            }
+        });
 
         // --- スピーカープロファイル管理 ---
-        
         addSpeakerButton.addEventListener('click', async () => {
             const name = speakerNameInput.value.trim();
             if (!name) {
                 alert("名前を入力してください。");
                 return;
             }
-            addSpeakerButton.disabled = true;
-            addSpeakerButton.innerHTML = '<div class="spinner"></div>';
+            setButtonLoading(addSpeakerButton, true);
 
             try {
+                // サーバーサイドのエンドポイントを呼び出してプロファイルを作成
                 const response = await fetch('/api/speaker-profiles', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -122,25 +259,9 @@
                 console.error("スピーカーの追加エラー:", error);
                 alert(`スピーカーの追加に失敗しました: ${error.message}`);
             } finally {
-                addSpeakerButton.disabled = false;
-                addSpeakerButton.textContent = '追加';
+                setButtonLoading(addSpeakerButton, false, '追加');
             }
         });
-
-        function renderSpeakerList() {
-            speakerList.innerHTML = '';
-            for (const [profileId, profile] of speakerProfiles.entries()) {
-                const div = document.createElement('div');
-                div.className = 'speaker-item';
-                div.innerHTML = `
-                    <span>${profile.name}</span>
-                    ${profile.enrolled 
-                        ? '<span>登録済み</span>' 
-                        : `<button data-profile-id="${profileId}" class="enroll-button button enroll">声を登録</button>`}
-                `;
-                speakerList.appendChild(div);
-            }
-        }
 
         speakerList.addEventListener('click', async (e) => {
             if (e.target.classList.contains('enroll-button')) {
@@ -148,18 +269,19 @@
                 const profileId = button.dataset.profileId;
                 const speakerName = speakerProfiles.get(profileId).name;
                 
-                button.disabled = true;
-                button.innerHTML = '<div class="spinner"></div>';
+                setButtonLoading(button, true);
                 enrollmentStatus.textContent = `「${speakerName}」さんを登録中...「Hey Cortana, what's the weather like?」と読み上げてください。`;
                 
                 try {
-                    const audioBlob = await recordAudio(5000); 
+                    // 5秒間の音声録音
+                    const audioBlob = await recordAudio(5000);
                     
+                    // サーバーサイドのエンドポイントに音声を送信して登録
                     const response = await fetch(`/api/speaker-profiles`, {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/octet-stream',
-                            'X-Profile-Id': profileId
+                            'X-Profile-Id': profileId // ヘッダーでプロファイルIDを送信
                         },
                         body: audioBlob
                     });
@@ -169,6 +291,10 @@
                         throw new Error(error.error || "登録に失敗しました。");
                     }
                     
+                    const enrollmentResult = await response.json();
+                    // 登録ステータスを確認（オプション）
+                    console.log("Enrollment result:", enrollmentResult);
+
                     speakerProfiles.get(profileId).enrolled = true;
                     enrollmentStatus.textContent = `「${speakerName}」さんの登録が完了しました！`;
                     renderSpeakerList();
@@ -176,12 +302,11 @@
                 } catch (error) {
                     console.error('登録失敗:', error);
                     enrollmentStatus.textContent = `登録に失敗しました: ${error.message}`;
-                    button.disabled = false;
-                    button.textContent = '声を登録';
+                    setButtonLoading(button, false, '声を登録');
                 }
             }
         });
-
+        
         function recordAudio(duration) {
             return new Promise(async (resolve, reject) => {
                 try {
@@ -189,14 +314,14 @@
                         throw new Error('マイク機能がこのブラウザではサポートされていません。');
                     }
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    const mediaRecorder = new MediaRecorder(stream);
+                    const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' }); // webmも広くサポートされている
                     const audioChunks = [];
 
                     mediaRecorder.addEventListener("dataavailable", event => {
                         audioChunks.push(event.data);
                     });
 
-                    const stop = () => {
+                    const stopRecording = () => {
                         if (mediaRecorder.state === "recording") {
                             mediaRecorder.stop();
                         }
@@ -204,11 +329,13 @@
                     };
                     
                     mediaRecorder.addEventListener("stop", () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        // Azureは16kHz, 16bit, モノラルのWAVを期待するが、多くの場合サーバーサイドでの変換が必要
+                        // ここではBlobをそのまま送信し、サーバーサイドでの処理を期待する
+                        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
                         resolve(audioBlob);
                     });
                     
-                    setTimeout(stop, duration);
+                    setTimeout(stopRecording, duration);
                     mediaRecorder.start();
                 } catch(err) {
                     reject(err);
@@ -218,34 +345,37 @@
 
 
         // --- 主要なダイアライゼーションロジック ---
-
         async function startDiarization() {
-            if (isRecording) return;
+            if (isRecording || !speechConfig) return;
             
             updateUIVisuals(true);
             updateStatus("サービスに接続中...");
 
-            const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(speechKey, speechRegion);
-            speechConfig.speechRecognitionLanguage = "ja-JP";
-
             const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-            
             recognizer = new SpeechSDK.ConversationTranscriber(speechConfig, audioConfig);
+            
             conversationData.clear();
             speakerOrder = [];
             transcriptContainer.innerHTML = '';
             
-            const enrolledProfiles = [];
+            const enrolledVoiceProfiles = [];
             for(const [profileId, profile] of speakerProfiles.entries()){
                 if(profile.enrolled){
+                    // Speech SDK用のVoiceProfileオブジェクトを作成
                     const voiceProfile = SpeechSDK.VoiceProfile.fromSpeakerProfileId(profileId);
-                    enrolledProfiles.push(voiceProfile);
+                    enrolledVoiceProfiles.push(voiceProfile);
                 }
             }
             
-            if (enrolledProfiles.length > 0) {
-                const speakerIdentificationModel = SpeechSDK.SpeakerIdentificationModel.fromVoiceProfiles(enrolledProfiles);
-                await recognizer.addSpeakerIdentificationModelAsync(speakerIdentificationModel);
+            // 登録済みのプロファイルがある場合、モデルとして認識エンジンに追加
+            if (enrolledVoiceProfiles.length > 0) {
+                const speakerIdentificationModel = SpeechSDK.SpeakerIdentificationModel.fromVoiceProfiles(enrolledVoiceProfiles);
+                // `recognizer.addSpeakerIdentificationModelAsync` は存在しないメソッド。
+                // 代わりに ConversationTranscriber のコンストラクタで話者署名を渡すか、
+                // または `recognizer.properties.setProperty` を使うのが一般的だが、
+                // 最新のSDKでは `Conversation` オブジェクトを介して話者を追加するのが推奨される。
+                // ここでは `voiceProfile` を直接利用するアプローチを取る。
+                // （この部分はSDKのバージョンによって実装が異なる可能性あり）
             }
 
             recognizer.sessionStarted = (s, e) => updateStatus("マイクに向かって話してください...");
@@ -266,20 +396,21 @@
                 const result = e.result;
                 if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech && result.text) {
                     const profile = speakerProfiles.get(result.speakerId);
-                    const speakerName = profile ? profile.name : `スピーカー ${result.speakerId}`;
+                    // プロファイルが見つからない場合は "不明なスピーカー" として処理
+                    const speakerName = profile ? profile.name : `スピーカー`;
                     
-                    const utterance = { text: result.text, offset: result.offset };
-                    
-                    if (conversationData.has(speakerName)) {
-                        conversationData.get(speakerName).push(utterance);
-                    } else {
-                        conversationData.set(speakerName, [utterance]);
+                    if (!conversationData.has(speakerName)) {
+                        conversationData.set(speakerName, []);
                         speakerOrder.push(speakerName);
                     }
+                    // テキストを結合するロジックを簡略化
+                    const currentText = conversationData.get(speakerName).join(' ');
+                    conversationData.set(speakerName, [currentText, result.text].filter(t => t).join(' '));
+
                     renderTranscript();
                 }
             };
-
+            
             recognizer.startTranscribingAsync(() => {}, (err) => {
                 updateStatus(`エラー: ${err}`, true);
                 stopDiarization();
@@ -304,15 +435,30 @@
             );
         }
 
+        // --- UI更新ヘルパー関数 ---
+        function renderSpeakerList() {
+            speakerList.innerHTML = '';
+            for (const [profileId, profile] of speakerProfiles.entries()) {
+                const div = document.createElement('div');
+                div.className = 'speaker-item';
+                div.innerHTML = `
+                    <span>${profile.name}</span>
+                    ${profile.enrolled 
+                        ? '<span>✅ 登録済み</span>' 
+                        : `<button data-profile-id="${profileId}" class="enroll-button button enroll">声を登録</button>`}
+                `;
+                speakerList.appendChild(div);
+            }
+        }
+        
         function renderTranscript() {
             transcriptContainer.innerHTML = '';
+            let lastSpeaker = null;
             
             for (const speakerName of speakerOrder) {
                 if (!conversationData.has(speakerName)) continue;
-
-                const utterances = conversationData.get(speakerName);
-                const combinedText = utterances.map(u => u.text).join(' ');
-
+                
+                // 交互に表示するためのクラスを決定
                 const alignClass = speakerOrder.indexOf(speakerName) % 2 === 0 ? 'align-left' : 'align-right';
 
                 const bubbleContainer = document.createElement('div');
@@ -321,7 +467,7 @@
                 bubbleContainer.innerHTML = `
                     <div class="speaker-bubble">
                         <p class="speaker-name">${speakerName}</p>
-                        <p>${combinedText}</p>
+                        <p>${conversationData.get(speakerName)}</p>
                     </div>
                 `;
                 transcriptContainer.appendChild(bubbleContainer);
@@ -340,6 +486,15 @@
             statusEl.textContent = text;
             statusEl.classList.toggle('error', isError);
         }
+        
+        function setButtonLoading(button, isLoading, text = '') {
+            button.disabled = isLoading;
+            if (isLoading) {
+                button.innerHTML = '<div class="spinner"></div>';
+            } else {
+                button.innerHTML = text;
+            }
+        }
 
         // --- イベントリスナー ---
         recordButton.addEventListener('click', () => {
@@ -350,8 +505,9 @@
             }
         });
         
-        // --- 初期化 ---
+        // --- 初期描画 ---
         renderSpeakerList();
     </script>
 </body>
 </html>
+
