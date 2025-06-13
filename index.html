@@ -184,7 +184,8 @@
     <!-- Azure Speech SDK -->
     <script src="https://aka.ms/csspeech/js/latest/speech-sdk.js"></script>
 
-    <script type="module">
+    <!-- ★ 修正点: `type="module"` を `defer` に変更して、SDKの読み込み順序を保証します -->
+    <script defer>
         // --- DOM要素の参照 ---
         const recordButton = document.getElementById('recordButton');
         const micIcon = document.getElementById('micIcon');
@@ -202,12 +203,14 @@
         let conversationData = new Map();
         let speakerProfiles = new Map();
         let speakerOrder = [];
-        let speechConfig = null; // ★ 修正点: speechConfigをグローバルに保持
+        let speechConfig = null;
 
         // --- 初期化処理 ---
+        // `defer`属性により、このスクリプトはDOMの準備ができた後に実行されるため、
+        // `DOMContentLoaded`リスナーは必須ではありませんが、コード構造として残しておきます。
         document.addEventListener('DOMContentLoaded', async () => {
             try {
-                // ★ 修正点: サーバーから認証トークンを取得
+                // サーバーから認証トークンを取得
                 const response = await fetch('/api/get-speech-token');
                 if (!response.ok) {
                     const err = await response.json();
@@ -215,7 +218,7 @@
                 }
                 const { token, region } = await response.json();
 
-                // ★ 修正点: サブスクリプションキーの代わりに認証トークンを使用
+                // サブスクリプションキーの代わりに認証トークンを使用
                 speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
                 speechConfig.speechRecognitionLanguage = "ja-JP";
 
@@ -329,8 +332,6 @@
                     };
                     
                     mediaRecorder.addEventListener("stop", () => {
-                        // Azureは16kHz, 16bit, モノラルのWAVを期待するが、多くの場合サーバーサイドでの変換が必要
-                        // ここではBlobをそのまま送信し、サーバーサイドでの処理を期待する
                         const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
                         resolve(audioBlob);
                     });
@@ -358,26 +359,18 @@
             speakerOrder = [];
             transcriptContainer.innerHTML = '';
             
-            const enrolledVoiceProfiles = [];
+            const conversation = SpeechSDK.Conversation.createConversationAsync(speechConfig, "conversation1");
+
             for(const [profileId, profile] of speakerProfiles.entries()){
                 if(profile.enrolled){
-                    // Speech SDK用のVoiceProfileオブジェクトを作成
                     const voiceProfile = SpeechSDK.VoiceProfile.fromSpeakerProfileId(profileId);
-                    enrolledVoiceProfiles.push(voiceProfile);
+                    // Conversation オブジェクトに話者を追加
+                    await conversation.addParticipantByVoiceProfileAsync(profile.name, voiceProfile);
                 }
             }
             
-            // 登録済みのプロファイルがある場合、モデルとして認識エンジンに追加
-            if (enrolledVoiceProfiles.length > 0) {
-                const speakerIdentificationModel = SpeechSDK.SpeakerIdentificationModel.fromVoiceProfiles(enrolledVoiceProfiles);
-                // `recognizer.addSpeakerIdentificationModelAsync` は存在しないメソッド。
-                // 代わりに ConversationTranscriber のコンストラクタで話者署名を渡すか、
-                // または `recognizer.properties.setProperty` を使うのが一般的だが、
-                // 最新のSDKでは `Conversation` オブジェクトを介して話者を追加するのが推奨される。
-                // ここでは `voiceProfile` を直接利用するアプローチを取る。
-                // （この部分はSDKのバージョンによって実装が異なる可能性あり）
-            }
-
+            await recognizer.joinConversationAsync(conversation);
+            
             recognizer.sessionStarted = (s, e) => updateStatus("マイクに向かって話してください...");
             recognizer.sessionStopped = (s, e) => {
                 updateStatus("最終結果を処理中...");
@@ -395,18 +388,15 @@
             recognizer.transcribed = (s, e) => {
                 const result = e.result;
                 if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech && result.text) {
-                    const profile = speakerProfiles.get(result.speakerId);
-                    // プロファイルが見つからない場合は "不明なスピーカー" として処理
-                    const speakerName = profile ? profile.name : `スピーカー`;
+                    const speakerName = result.speakerId;
                     
                     if (!conversationData.has(speakerName)) {
                         conversationData.set(speakerName, []);
                         speakerOrder.push(speakerName);
                     }
-                    // テキストを結合するロジックを簡略化
-                    const currentText = conversationData.get(speakerName).join(' ');
-                    conversationData.set(speakerName, [currentText, result.text].filter(t => t).join(' '));
-
+                    
+                    const utterances = conversationData.get(speakerName);
+                    utterances.push(result.text);
                     renderTranscript();
                 }
             };
@@ -453,12 +443,13 @@
         
         function renderTranscript() {
             transcriptContainer.innerHTML = '';
-            let lastSpeaker = null;
             
             for (const speakerName of speakerOrder) {
-                if (!conversationData.has(speakerName)) continue;
+                const utterances = conversationData.get(speakerName);
+                if (!utterances || utterances.length === 0) continue;
+
+                const combinedText = utterances.join(' ');
                 
-                // 交互に表示するためのクラスを決定
                 const alignClass = speakerOrder.indexOf(speakerName) % 2 === 0 ? 'align-left' : 'align-right';
 
                 const bubbleContainer = document.createElement('div');
@@ -467,7 +458,7 @@
                 bubbleContainer.innerHTML = `
                     <div class="speaker-bubble">
                         <p class="speaker-name">${speakerName}</p>
-                        <p>${conversationData.get(speakerName)}</p>
+                        <p>${combinedText}</p>
                     </div>
                 `;
                 transcriptContainer.appendChild(bubbleContainer);
@@ -510,4 +501,3 @@
     </script>
 </body>
 </html>
-
