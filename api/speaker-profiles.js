@@ -5,8 +5,8 @@ const fetch = require('node-fetch');
 
 // --- 設定 ---
 // Vercelの環境変数から読み込まれます
-const SPEECH_KEY = process.env.VITE_SPEECH_KEY;
-const SPEECH_REGION = process.env.VITE_SPEECH_REGION;
+const SPEECH_KEY = process.env.SPEECH_KEY;
+const SPEECH_REGION = process.env.SPEECH_REGION;
 
 // Speaker Recognition APIのエンドポイント
 const SPEAKER_RECOGNITION_ENDPOINT = `https://${SPEECH_REGION}.api.cognitive.microsoft.com/speaker/identification/v2.0`;
