@@ -209,7 +209,9 @@
         function loadSpeechSDK() {
             return new Promise((resolve, reject) => {
                 const script = document.createElement('script');
-                script.src = 'https://aka.ms/csspeech/js/latest/speech-sdk.js';
+                // ★ 修正: 短縮URL(aka.ms)が意図せずBing.comにリダイレクトされる問題に対処するため、
+                // Azure CDN上のスクリプトを直接指定します。
+                script.src = 'https://csspeechstorage.blob.core.windows.net/sdk/js/speech-sdk.min.js';
                 // スクリプトのロードが成功した場合
                 script.onload = () => {
                     // SpeechSDK オブジェクトがグローバルに利用可能になったことを確認
