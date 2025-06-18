@@ -18,24 +18,20 @@ export default async function handler(req, res) {
     }
 }
 
-/**
- * Azureに新しいスピーカープロファイルを作成
- */
 async function handleCreateProfile(req, res) {
     console.log("==> handleCreateProfile: 開始");
     try {
         const speechKey = process.env.SPEECH_KEY;
-        // ★ 修正: SPEECH_ENDPOINT の代わりに SPEECH_REGION を使用し、設定を統一します。
-        const speechRegion = process.env.SPEECH_REGION; 
+        // ★ 元に戻す: Azureポータルから取得した完全なエンドポイントURLを使用するため、SPEECH_ENDPOINT を再度使用します。
+        const speechEndpoint = process.env.SPEECH_ENDPOINT; 
 
-        if (!speechKey || !speechRegion) {
-            const errorMessage = "サーバー設定エラー: SPEECH_KEYまたはSPEECH_REGION環境変数がVercelに設定されていません。";
+        if (!speechKey || !speechEndpoint) {
+            const errorMessage = "サーバー設定エラー: SPEECH_KEYまたはSPEECH_ENDPOINT環境変数がVercelに設定されていません。";
             console.error(`==> handleCreateProfile: ${errorMessage}`);
             return res.status(500).json({ error: errorMessage });
         }
 
-        // ★ 修正: SPEECH_REGION からエンドポイントURLを動的に構築します。
-        const endpoint = `https://${speechRegion}.api.cognitive.microsoft.com/speaker/identification/v2.0/profiles`;
+        const endpoint = `${speechEndpoint}speaker/identification/v2.0/profiles`;
         console.log(`==> handleCreateProfile: 構築されたAzureエンドポイント: ${endpoint}`);
 
         const { name } = req.body;
@@ -53,14 +49,9 @@ async function handleCreateProfile(req, res) {
         });
 
         const responseData = await response.json();
-        console.log(`==> handleCreateProfile: Azureからのレスポンスステータス: ${response.status}`);
-        console.log("==> handleCreateProfile: Azureからのレスポンスデータ:", JSON.stringify(responseData, null, 2));
-
         if (!response.ok) {
-            throw new Error(responseData.error?.message || `Unknown error from Azure (Status: ${response.status})`);
+            throw new Error(responseData.error?.message || 'Unknown error from Azure');
         }
-        
-        console.log("==> handleCreateProfile: プロファイル作成成功");
         res.status(201).json({ profileId: responseData.profileId });
 
     } catch (error) {
@@ -69,17 +60,13 @@ async function handleCreateProfile(req, res) {
     }
 }
 
-/**
- * 既存プロファイルに対して音声登録を作成
- */
 async function handleCreateEnrollment(req, res) {
     try {
         const speechKey = process.env.SPEECH_KEY;
-        // ★ 修正: こちらの関数でも SPEECH_REGION を使用します。
-        const speechRegion = process.env.SPEECH_REGION;
+        const speechEndpoint = process.env.SPEECH_ENDPOINT;
 
-        if (!speechKey || !speechRegion) {
-            throw new Error("サーバー設定エラー: SPEECH_KEYまたはSPEECH_REGIONがありません。");
+        if (!speechKey || !speechEndpoint) {
+            throw new Error("サーバー設定エラー: SPEECH_KEYまたはSPEECH_ENDPOINTがありません。");
         }
 
         const profileId = req.headers['x-profile-id'];
@@ -87,8 +74,7 @@ async function handleCreateEnrollment(req, res) {
             return res.status(400).json({ error: 'Profile ID is required in X-Profile-Id header' });
         }
 
-        // ★ 修正: 登録用のエンドポイントも SPEECH_REGION から構築します。
-        const endpoint = `https://${speechRegion}.api.cognitive.microsoft.com/speaker/identification/v2.0/profiles/${profileId}/enrollments`;
+        const endpoint = `${speechEndpoint}speaker/identification/v2.0/profiles/${profileId}/enrollments`;
 
         const response = await fetch(endpoint, {
             method: 'POST',
@@ -96,15 +82,15 @@ async function handleCreateEnrollment(req, res) {
                 'Ocp-Apim-Subscription-Key': speechKey,
                 'Content-Type': 'application/octet-stream'
             },
-            body: req.body 
+            body: req.body
         });
         
         if (response.status === 200 || response.status === 202) {
-             const responseData = await response.json();
-             res.status(response.status).json(responseData);
+            const responseData = await response.json();
+            res.status(response.status).json(responseData);
         } else {
-             const errorData = await response.json();
-             throw new Error(errorData.error?.message || `Unknown enrollment error (Status: ${response.status})`);
+            const errorData = await response.json();
+            throw new Error(errorData.error?.message || 'Unknown enrollment error');
         }
 
     } catch (error) {
