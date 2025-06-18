@@ -22,7 +22,6 @@ async function handleCreateProfile(req, res) {
     console.log("==> handleCreateProfile: 開始");
     try {
         const speechKey = process.env.SPEECH_KEY;
-        // ★ 元に戻す: Azureポータルから取得した完全なエンドポイントURLを使用するため、SPEECH_ENDPOINT を再度使用します。
         const speechEndpoint = process.env.SPEECH_ENDPOINT; 
 
         if (!speechKey || !speechEndpoint) {
@@ -31,7 +30,8 @@ async function handleCreateProfile(req, res) {
             return res.status(500).json({ error: errorMessage });
         }
 
-        const endpoint = `${speechEndpoint}speaker/identification/v2.0/profiles`;
+        // ★ 修正: 正しいAPIパスに "/text-independent" を追加
+        const endpoint = `${speechEndpoint}speaker/identification/v2.0/text-independent/profiles`;
         console.log(`==> handleCreateProfile: 構築されたAzureエンドポイント: ${endpoint}`);
 
         const { name } = req.body;
@@ -74,7 +74,8 @@ async function handleCreateEnrollment(req, res) {
             return res.status(400).json({ error: 'Profile ID is required in X-Profile-Id header' });
         }
 
-        const endpoint = `${speechEndpoint}speaker/identification/v2.0/profiles/${profileId}/enrollments`;
+        // ★ 修正: 正しいAPIパスに "/text-independent" を追加
+        const endpoint = `${speechEndpoint}speaker/identification/v2.0/text-independent/profiles/${profileId}/enrollments`;
 
         const response = await fetch(endpoint, {
             method: 'POST',
