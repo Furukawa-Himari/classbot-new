@@ -25,18 +25,17 @@ async function handleCreateProfile(req, res) {
     console.log("==> handleCreateProfile: 開始");
     try {
         const speechKey = process.env.SPEECH_KEY;
-        // ★修正点1: 新しい環境変数 `SPEECH_ENDPOINT` を使用する
-        const speechEndpoint = process.env.SPEECH_ENDPOINT; 
+        // ★ 修正: SPEECH_ENDPOINT の代わりに SPEECH_REGION を使用し、設定を統一します。
+        const speechRegion = process.env.SPEECH_REGION; 
 
-        if (!speechKey || !speechEndpoint) {
-            const errorMessage = "サーバー設定エラー: SPEECH_KEYまたはSPEECH_ENDPOINT環境変数がVercelに設定されていません。";
+        if (!speechKey || !speechRegion) {
+            const errorMessage = "サーバー設定エラー: SPEECH_KEYまたはSPEECH_REGION環境変数がVercelに設定されていません。";
             console.error(`==> handleCreateProfile: ${errorMessage}`);
             return res.status(500).json({ error: errorMessage });
         }
 
-        // ★修正点2: エンドポイントURLを正しく構築する
-        // `speechEndpoint` は 'https://<your-resource-name>.cognitiveservices.azure.com/' のような形式であるべきです
-        const endpoint = `${speechEndpoint}speaker/identification/v2.0/profiles`;
+        // ★ 修正: SPEECH_REGION からエンドポイントURLを動的に構築します。
+        const endpoint = `https://${speechRegion}.api.cognitive.microsoft.com/speaker/identification/v2.0/profiles`;
         console.log(`==> handleCreateProfile: 構築されたAzureエンドポイント: ${endpoint}`);
 
         const { name } = req.body;
@@ -58,8 +57,7 @@ async function handleCreateProfile(req, res) {
         console.log("==> handleCreateProfile: Azureからのレスポンスデータ:", JSON.stringify(responseData, null, 2));
 
         if (!response.ok) {
-            // Azureからのエラーメッセージを直接利用する
-            throw new Error(responseData.error?.message || 'Unknown error from Azure');
+            throw new Error(responseData.error?.message || `Unknown error from Azure (Status: ${response.status})`);
         }
         
         console.log("==> handleCreateProfile: プロファイル作成成功");
@@ -77,11 +75,11 @@ async function handleCreateProfile(req, res) {
 async function handleCreateEnrollment(req, res) {
     try {
         const speechKey = process.env.SPEECH_KEY;
-        // ★修正点3: こちらの関数でも新しい環境変数を使う
-        const speechEndpoint = process.env.SPEECH_ENDPOINT;
+        // ★ 修正: こちらの関数でも SPEECH_REGION を使用します。
+        const speechRegion = process.env.SPEECH_REGION;
 
-        if (!speechKey || !speechEndpoint) {
-            throw new Error("サーバー設定エラー: SPEECH_KEYまたはSPEECH_ENDPOINTがありません。");
+        if (!speechKey || !speechRegion) {
+            throw new Error("サーバー設定エラー: SPEECH_KEYまたはSPEECH_REGIONがありません。");
         }
 
         const profileId = req.headers['x-profile-id'];
@@ -89,26 +87,24 @@ async function handleCreateEnrollment(req, res) {
             return res.status(400).json({ error: 'Profile ID is required in X-Profile-Id header' });
         }
 
-        // ★修正点4: 登録用のエンドポイントも正しく構築する
-        const endpoint = `${speechEndpoint}speaker/identification/v2.0/profiles/${profileId}/enrollments`;
+        // ★ 修正: 登録用のエンドポイントも SPEECH_REGION から構築します。
+        const endpoint = `https://${speechRegion}.api.cognitive.microsoft.com/speaker/identification/v2.0/profiles/${profileId}/enrollments`;
 
-        // VercelのBody-Parserはデフォルトで有効なので、リクエストボディを直接ストリームできます
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Ocp-Apim-Subscription-Key': speechKey,
                 'Content-Type': 'application/octet-stream'
             },
-            body: req.body // Vercelでは `req` ではなく `req.body` を使います
+            body: req.body 
         });
         
-        // 音声登録APIは成功時に202 (Accepted) を返すことがある
         if (response.status === 200 || response.status === 202) {
              const responseData = await response.json();
              res.status(response.status).json(responseData);
         } else {
              const errorData = await response.json();
-             throw new Error(errorData.error?.message || 'Unknown enrollment error');
+             throw new Error(errorData.error?.message || `Unknown enrollment error (Status: ${response.status})`);
         }
 
     } catch (error) {
