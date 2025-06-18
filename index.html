@@ -182,8 +182,6 @@
     </div>
 
     <!-- Azure Speech SDK -->
-    <script src="https://aka.ms/csspeech/js/latest/speech-sdk.js"></script>
-
     <script>
         // --- DOM要素の参照 ---
         const recordButton = document.getElementById('recordButton');
@@ -204,38 +202,53 @@
         let speakerOrder = [];
         let speechConfig = null;
 
-        // ★★★ 修正点: SDKがロードされるまでポーリングする関数 ★★★
-        function waitForSDK() {
+        /**
+         * Speech SDKスクリプトを動的にロードし、ロード完了を待つPromiseを返します。
+         * これにより、setIntervalを使ったポーリングよりも確実な方法でSDKのロードを待つことができます。
+         */
+        function loadSpeechSDK() {
             return new Promise((resolve, reject) => {
-                let retries = 0;
-                const interval = setInterval(() => {
+                const script = document.createElement('script');
+                script.src = 'https://aka.ms/csspeech/js/latest/speech-sdk.js';
+                // スクリプトのロードが成功した場合
+                script.onload = () => {
+                    // SpeechSDK オブジェクトがグローバルに利用可能になったことを確認
                     if (typeof SpeechSDK !== "undefined") {
-                        clearInterval(interval);
+                        console.log("Speech SDK loaded successfully.");
                         resolve();
+                    } else {
+                        reject(new Error("SpeechSDK object not found after script load."));
                     }
-                    retries++;
-                    if (retries > 50) { // タイムアウト (5秒)
-                        clearInterval(interval);
-                        reject(new Error("SpeechSDK failed to load in 5 seconds. Check network or script URL."));
-                    }
-                }, 100);
+                };
+                // スクリプトのロードに失敗した場合 (ネットワークエラーなど)
+                script.onerror = (err) => {
+                    console.error("Failed to load Speech SDK script:", err);
+                    reject(new Error("Could not load the Speech SDK script. Check network connection, ad-blockers, or script URL."));
+                };
+                document.head.appendChild(script);
             });
         }
-        
-        // ★★★ 修正点: 初期化ロジックを更新 ★★★
+
+        /**
+         * アプリケーションの初期化を行います。
+         * SDKの動的ロード、認証トークンの取得、UIのセットアップを含みます。
+         */
         async function initializeApp() {
             try {
-                updateStatus("SDKを待機中...", false);
-                await waitForSDK();
+                updateStatus("SDKを読み込み中...", false);
+                // 新しいロード関数を呼び出し、完了を待つ
+                await loadSpeechSDK();
                 
                 updateStatus("認証中...", false);
                 const response = await fetch('/api/get-speech-token');
                 if (!response.ok) {
                     const err = await response.json();
-                    throw new Error(err.error || 'Failed to get auth token.');
+                    // サーバーからのエラーメッセージを優先的に表示
+                    throw new Error(err.error || `Failed to get auth token (Status: ${response.status}).`);
                 }
                 const { token, region } = await response.json();
 
+                // SpeechSDKがロードされた後に設定を初期化
                 speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
                 speechConfig.speechRecognitionLanguage = "ja-JP";
 
@@ -250,14 +263,16 @@
 
             } catch (error) {
                 console.error("Initialization Error:", error);
+                // ユーザーに分かりやすいエラーメッセージを表示
                 updateStatus(`エラー: 初期化に失敗しました。 ${error.message}`, true);
                 recordButton.disabled = true;
                 addSpeakerButton.disabled = true;
             }
         }
 
-        // アプリケーションの初期化を開始
-        initializeApp();
+        // DOMが完全に読み込まれてからアプリケーションの初期化を開始します。
+        // これにより、すべてのHTML要素が利用可能であることが保証されます。
+        document.addEventListener('DOMContentLoaded', initializeApp);
 
         // --- イベントハンドラ関数 ---
         async function handleAddSpeaker() {
