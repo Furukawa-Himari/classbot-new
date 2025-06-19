@@ -172,7 +172,7 @@
     </div>
 
     <!-- Azure Speech SDK -->
-            <script>
+                <script>
         // --- DOM要素の参照 ---
         const recordButton = document.getElementById('recordButton');
         const micIcon = document.getElementById('micIcon');
@@ -235,7 +235,10 @@
 
             updateUIVisuals(true);
             updateStatus("サービスに接続中...");
-            speechConfig.setProperty(SpeechSDK.PropertyId.SpeechServiceResponse_RequestWordLevelTimestamps, "true");
+
+            // ★ 修正点: これがダイアライゼーションを有効にするための正しいコードです。
+            speechConfig.setServiceProperty("diarization.enabled", "true", SpeechSDK.ServicePropertyChannel.UriQueryParameter);
+            
             const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
             recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
 
@@ -244,18 +247,15 @@
             transcriptContainer.innerHTML = '';
 
             recognizer.sessionStarted = (s, e) => {
-                console.log("セッション開始 (sessionStarted) イベント受信");
                 updateStatus("マイクに向かって話してください...");
             };
 
             recognizer.sessionStopped = (s, e) => {
-                console.log("セッション停止 (sessionStopped) イベント受信");
                 updateStatus("セッションが停止しました。");
                 stopDiarization();
             };
 
             recognizer.canceled = (s, e) => {
-                console.log("キャンセル (canceled) イベント受信:", e);
                 let errorMessage = `キャンセルされました: ${e.reason}`;
                 if (e.reason === SpeechSDK.CancellationReason.Error) {
                     errorMessage += ` | ErrorCode=${e.errorCode} | ErrorDetails=${e.errorDetails}`;
@@ -263,27 +263,12 @@
                 updateStatus(errorMessage, true);
                 stopDiarization();
             };
-            
-            // ★ デバッグ用ログ: 'recognizing' イベント（中間結果）
-            recognizer.recognizing = (s, e) => {
-                const result = e.result;
-                if (result.text) {
-                    console.log("中間結果 (recognizing):", `SPEAKER: ${result.speakerId}`, `TEXT: ${result.text}`);
-                }
-            };
 
             recognizer.recognized = (s, e) => {
                 const result = e.result;
-
-                // ★ デバッグ用ログ: 'recognized' イベントで受け取った全結果
-                console.log("最終結果 (recognized) イベント受信:", result);
-                
                 if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech && result.text) {
                     const speakerId = result.speakerId;
                     
-                    // ★ デバッグ用ログ: 認識された音声の詳細
-                    console.log(`音声認識成功: Speaker ID=${speakerId}, Text=${result.text}`);
-
                     if (!conversationData.has(speakerId)) {
                         conversationData.set(speakerId, []);
                         speakerOrder.push(speakerId);
@@ -292,9 +277,6 @@
                     const utterances = conversationData.get(speakerId);
                     utterances.push(result.text);
                     renderTranscript();
-                } else if (result.reason === SpeechSDK.ResultReason.NoMatch) {
-                    // ★ デバッグ用ログ: 音声が検出されなかった場合
-                    console.log("音声不一致 (NoMatch): 音声として認識できる部分がありませんでした。マイクが遠いか、無音状態が続いた可能性があります。");
                 }
             };
 
@@ -326,12 +308,6 @@
         }
 
         function renderTranscript() {
-            // ★ デバッグ用ログ: 転写をレンダリングする直前のデータ
-            console.log("レンダリング実行:", {
-                conversationData: Object.fromEntries(conversationData), // Mapをオブジェクトに変換して見やすくする
-                speakerOrder: speakerOrder
-            });
-
             transcriptContainer.innerHTML = '';
             
             for (const speakerId of speakerOrder) {
@@ -340,6 +316,7 @@
 
                 const combinedText = utterances.join(' ');
                 
+                // speakerIdが "Speaker 1" などになるため、このコードは正しく動作します
                 const speakerNumber = parseInt(speakerId.split(" ")[1] || "1");
                 const alignClass = speakerNumber % 2 !== 0 ? 'align-left' : 'align-right';
 
