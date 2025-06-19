@@ -172,7 +172,7 @@
     </div>
 
     <!-- Azure Speech SDK -->
-                <script>
+                    <script>
         // --- DOM要素の参照 ---
         const recordButton = document.getElementById('recordButton');
         const micIcon = document.getElementById('micIcon');
@@ -231,59 +231,72 @@
         }
 
         function startDiarization() {
-            if (isRecording || !speechConfig) return;
+            console.log("1. startDiarization: 関数が呼び出されました。");
+
+            if (isRecording || !speechConfig) {
+                console.log("startDiarization: isRecordingまたはspeechConfigがないため終了します。", { isRecording, speechConfig });
+                return;
+            }
 
             updateUIVisuals(true);
             updateStatus("サービスに接続中...");
-
-            // ★ 修正点: これがダイアライゼーションを有効にするための正しいコードです。
-            speechConfig.setServiceProperty("diarization.enabled", "true", SpeechSDK.ServicePropertyChannel.UriQueryParameter);
             
-            const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-            recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+            try {
+                // ★ デバッグ強化: 各ステップでオブジェクトが作成されるか確認します
+                speechConfig.setServiceProperty("diarization.enabled", "true", SpeechSDK.ServicePropertyChannel.UriQueryParameter);
+                console.log("2. startDiarization: 'diarization.enabled'プロパティを設定しました。");
 
-            conversationData.clear();
-            speakerOrder = [];
-            transcriptContainer.innerHTML = '';
-
-            recognizer.sessionStarted = (s, e) => {
-                updateStatus("マイクに向かって話してください...");
-            };
-
-            recognizer.sessionStopped = (s, e) => {
-                updateStatus("セッションが停止しました。");
-                stopDiarization();
-            };
-
-            recognizer.canceled = (s, e) => {
-                let errorMessage = `キャンセルされました: ${e.reason}`;
-                if (e.reason === SpeechSDK.CancellationReason.Error) {
-                    errorMessage += ` | ErrorCode=${e.errorCode} | ErrorDetails=${e.errorDetails}`;
+                const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+                if (!audioConfig) {
+                    throw new Error("AudioConfigの作成に失敗しました。マイクのアクセス許可を確認してください。");
                 }
-                updateStatus(errorMessage, true);
-                stopDiarization();
-            };
+                console.log("3. startDiarization: AudioConfigが正常に作成されました。");
 
-            recognizer.recognized = (s, e) => {
-                const result = e.result;
-                if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech && result.text) {
-                    const speakerId = result.speakerId;
-                    
-                    if (!conversationData.has(speakerId)) {
-                        conversationData.set(speakerId, []);
-                        speakerOrder.push(speakerId);
+                recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+                if (!recognizer) {
+                    throw new Error("SpeechRecognizerの作成に失敗しました。");
+                }
+                console.log("4. startDiarization: SpeechRecognizerが正常に作成されました。");
+
+                conversationData.clear();
+                speakerOrder = [];
+                transcriptContainer.innerHTML = '';
+
+                // イベントハンドラの設定
+                recognizer.sessionStarted = (s, e) => { console.log("イベント受信: sessionStarted"); updateStatus("マイクに向かって話してください..."); };
+                recognizer.sessionStopped = (s, e) => { console.log("イベント受信: sessionStopped"); updateStatus("セッションが停止しました。"); stopDiarization(); };
+                recognizer.canceled = (s, e) => { console.log("イベント受信: canceled", e); updateStatus(`キャンセルされました: ${e.reason}`, true); stopDiarization(); };
+                recognizer.recognized = (s, e) => {
+                    console.log("イベント受信: recognized", e.result);
+                    const result = e.result;
+                    if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech && result.text) {
+                        const speakerId = result.speakerId;
+                        if (!conversationData.has(speakerId)) {
+                            conversationData.set(speakerId, []);
+                            speakerOrder.push(speakerId);
+                        }
+                        const utterances = conversationData.get(speakerId);
+                        utterances.push(result.text);
+                        renderTranscript();
                     }
-                    
-                    const utterances = conversationData.get(speakerId);
-                    utterances.push(result.text);
-                    renderTranscript();
-                }
-            };
-
-            recognizer.startContinuousRecognitionAsync(() => {}, (err) => {
-                updateStatus(`エラー: ${err}`, true);
-                stopDiarization();
-            });
+                };
+                
+                console.log("5. startDiarization: startContinuousRecognitionAsyncを呼び出す直前です。");
+                recognizer.startContinuousRecognitionAsync(
+                    () => {
+                        console.log("6. startContinuousRecognitionAsync: 正常に開始されました。");
+                    }, 
+                    (err) => {
+                        console.error("7. startContinuousRecognitionAsync: 開始時にエラーが発生しました。", err);
+                        updateStatus(`エラー: ${err}`, true);
+                        stopDiarization();
+                    }
+                );
+            } catch (e) {
+                console.error("startDiarization内で致命的なエラー:", e);
+                updateStatus(`エラー: ${e.message}`, true);
+                updateUIVisuals(false);
+            }
         }
 
         function stopDiarization() {
@@ -309,20 +322,14 @@
 
         function renderTranscript() {
             transcriptContainer.innerHTML = '';
-            
             for (const speakerId of speakerOrder) {
                 const utterances = conversationData.get(speakerId);
                 if (!utterances || utterances.length === 0) continue;
-
                 const combinedText = utterances.join(' ');
-                
-                // speakerIdが "Speaker 1" などになるため、このコードは正しく動作します
                 const speakerNumber = parseInt(speakerId.split(" ")[1] || "1");
                 const alignClass = speakerNumber % 2 !== 0 ? 'align-left' : 'align-right';
-
                 const bubbleContainer = document.createElement('div');
                 bubbleContainer.className = `speaker-bubble-container ${alignClass}`;
-
                 bubbleContainer.innerHTML = `
                     <div class="speaker-bubble">
                         <p class="speaker-name">${speakerId}</p>
