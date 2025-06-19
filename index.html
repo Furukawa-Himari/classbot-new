@@ -172,7 +172,7 @@
     </div>
 
     <!-- Azure Speech SDK -->
-        <script>
+            <script>
         // --- DOM要素の参照 ---
         const recordButton = document.getElementById('recordButton');
         const micIcon = document.getElementById('micIcon');
@@ -190,7 +190,6 @@
         // アプリケーションの初期化
         async function initializeApp() {
             try {
-                // SDKのロード (この部分は以前の修正で完璧です)
                 await new Promise((resolve, reject) => {
                     const script = document.createElement('script');
                     script.src = 'https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@latest/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle.min.js';
@@ -199,7 +198,6 @@
                     document.head.appendChild(script);
                 });
                 
-                // 認証トークンの取得 (Webアプリではキーを直接使わず、この方法が安全でベストプラクティスです)
                 updateStatus("認証中...", false);
                 const response = await fetch('/api/get-speech-token');
                 if (!response.ok) {
@@ -211,9 +209,7 @@
                 speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
                 speechConfig.speechRecognitionLanguage = "ja-JP";
 
-                // イベントリスナーを設定
                 recordButton.addEventListener('click', handleRecordButtonClick);
-
                 updateStatus("準備完了。マイクボタンを押して開始してください。", false);
                 recordButton.disabled = false;
 
@@ -224,7 +220,6 @@
             }
         }
 
-        // 初期化を開始
         initializeApp();
 
         function handleRecordButtonClick() {
@@ -235,37 +230,32 @@
             }
         }
 
-        // --- 主要なダイアライゼーションロジック (更新) ---
         function startDiarization() {
             if (isRecording || !speechConfig) return;
 
             updateUIVisuals(true);
             updateStatus("サービスに接続中...");
-
-            // ★ 重要: ダイアライゼーションを有効にするためのプロパティ設定
             speechConfig.setProperty(SpeechSDK.PropertyId.SpeechServiceResponse_RequestWordLevelTimestamps, "true");
-
             const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-            
-            // ★ 変更点: ConversationTranscriberの代わりにSpeechRecognizerを使用
             recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
 
-            // 以前の会話データをクリア
             conversationData.clear();
             speakerOrder = [];
             transcriptContainer.innerHTML = '';
 
-            // --- イベントハンドラを設定 ---
             recognizer.sessionStarted = (s, e) => {
+                console.log("セッション開始 (sessionStarted) イベント受信");
                 updateStatus("マイクに向かって話してください...");
             };
 
             recognizer.sessionStopped = (s, e) => {
+                console.log("セッション停止 (sessionStopped) イベント受信");
                 updateStatus("セッションが停止しました。");
                 stopDiarization();
             };
 
             recognizer.canceled = (s, e) => {
+                console.log("キャンセル (canceled) イベント受信:", e);
                 let errorMessage = `キャンセルされました: ${e.reason}`;
                 if (e.reason === SpeechSDK.CancellationReason.Error) {
                     errorMessage += ` | ErrorCode=${e.errorCode} | ErrorDetails=${e.errorDetails}`;
@@ -273,78 +263,83 @@
                 updateStatus(errorMessage, true);
                 stopDiarization();
             };
+            
+            // ★ デバッグ用ログ: 'recognizing' イベント（中間結果）
+            recognizer.recognizing = (s, e) => {
+                const result = e.result;
+                if (result.text) {
+                    console.log("中間結果 (recognizing):", `SPEAKER: ${result.speakerId}`, `TEXT: ${result.text}`);
+                }
+            };
 
-            // ★ 変更点: 'transcribed' の代わりに 'recognized' イベントを使用
             recognizer.recognized = (s, e) => {
                 const result = e.result;
+
+                // ★ デバッグ用ログ: 'recognized' イベントで受け取った全結果
+                console.log("最終結果 (recognized) イベント受信:", result);
+                
                 if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech && result.text) {
-                    // result.speakerId は "Speaker 1" や "Speaker 2" のような文字列になります
                     const speakerId = result.speakerId;
                     
+                    // ★ デバッグ用ログ: 認識された音声の詳細
+                    console.log(`音声認識成功: Speaker ID=${speakerId}, Text=${result.text}`);
+
                     if (!conversationData.has(speakerId)) {
                         conversationData.set(speakerId, []);
-                        // 話者の登場順を保持
                         speakerOrder.push(speakerId);
                     }
                     
                     const utterances = conversationData.get(speakerId);
                     utterances.push(result.text);
                     renderTranscript();
+                } else if (result.reason === SpeechSDK.ResultReason.NoMatch) {
+                    // ★ デバッグ用ログ: 音声が検出されなかった場合
+                    console.log("音声不一致 (NoMatch): 音声として認識できる部分がありませんでした。マイクが遠いか、無音状態が続いた可能性があります。");
                 }
             };
 
-            // 認識を開始
-            recognizer.startContinuousRecognitionAsync(
-                () => {}, 
-                (err) => {
-                    updateStatus(`エラー: ${err}`, true);
-                    stopDiarization();
-                }
-            );
+            recognizer.startContinuousRecognitionAsync(() => {}, (err) => {
+                updateStatus(`エラー: ${err}`, true);
+                stopDiarization();
+            });
         }
 
         function stopDiarization() {
-            // ★ 修正: 複数の停止コマンドによる競合（レースコンディション）を防ぎます。
-
-            // グローバルなrecognizerが既に無ければ、停止処理は進行中か完了済みなので、何もしない。
             if (!recognizer) {
                 return;
             }
-
-            // グローバルなrecognizerをローカル変数に保存し、グローバル変数は即座にnullにする。
-            // これにより、以降のstopDiarization()呼び出しは、冒頭のif文で即座に終了するようになる。
             const recognizerToStop = recognizer;
             recognizer = null;
-
-            // 非同期の停止処理とクローズ処理は、ローカルに保存した参照に対して行う。
             recognizerToStop.stopContinuousRecognitionAsync(
                 () => {
                     recognizerToStop.close();
-                    updateUIVisuals(false); // isRecording = false に設定
+                    updateUIVisuals(false);
                     updateStatus("録音を停止しました。");
                 },
                 (err) => {
-                    // このエラーブロックが実行されても、ローカルのrecognizerToStopはnullではないため安全。
                     console.error("認識エンジンの停止エラー:", err);
                     recognizerToStop.close();
-                    updateUIVisuals(false); // isRecording = false に設定
+                    updateUIVisuals(false);
                     updateStatus(`停止エラー: ${err}`, true);
                 }
             );
         }
 
-        // --- UI更新ヘルパー関数 (一部変更) ---
         function renderTranscript() {
+            // ★ デバッグ用ログ: 転写をレンダリングする直前のデータ
+            console.log("レンダリング実行:", {
+                conversationData: Object.fromEntries(conversationData), // Mapをオブジェクトに変換して見やすくする
+                speakerOrder: speakerOrder
+            });
+
             transcriptContainer.innerHTML = '';
             
-            // speakerOrder 配列を使って、話者が初めて登場した順番で表示
             for (const speakerId of speakerOrder) {
                 const utterances = conversationData.get(speakerId);
                 if (!utterances || utterances.length === 0) continue;
 
                 const combinedText = utterances.join(' ');
                 
-                // 話者ID（"Speaker 1", "Speaker 2"）に基づいて、交互に左右に配置
                 const speakerNumber = parseInt(speakerId.split(" ")[1] || "1");
                 const alignClass = speakerNumber % 2 !== 0 ? 'align-left' : 'align-right';
 
