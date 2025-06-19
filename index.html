@@ -153,16 +153,6 @@
             <p>スピーカーを登録してから、マイクボタンを押して会話を開始してください。</p>
         </div>
 
-        <div class="enrollment-section">
-            <h2>スピーカー登録</h2>
-            <div class="add-speaker-form">
-                <input type="text" id="speakerNameInput" placeholder="スピーカーの名前を入力">
-                <button id="addSpeakerButton" class="button primary">追加</button>
-            </div>
-            <div id="speakerList" class="speaker-list"></div>
-            <p id="enrollmentStatus"></p>
-        </div>
-
         <div class="controls-container">
             <button id="recordButton" title="録音開始/停止" disabled>
                 <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
@@ -182,172 +172,60 @@
     </div>
 
     <!-- Azure Speech SDK -->
-    <script>
+        <script>
         // --- DOM要素の参照 ---
         const recordButton = document.getElementById('recordButton');
         const micIcon = document.getElementById('micIcon');
         const stopIcon = document.getElementById('stopIcon');
         const statusEl = document.getElementById('status');
         const transcriptContainer = document.getElementById('transcriptContainer');
-        const speakerNameInput = document.getElementById('speakerNameInput');
-        const addSpeakerButton = document.getElementById('addSpeakerButton');
-        const speakerList = document.getElementById('speakerList');
-        const enrollmentStatus = document.getElementById('enrollmentStatus');
 
-        // --- アプリケーションの状態 ---
+        // --- アプリケーションの状態 (簡略化) ---
         let recognizer = null;
         let isRecording = false;
         let conversationData = new Map();
-        let speakerProfiles = new Map();
         let speakerOrder = [];
         let speechConfig = null;
 
-        /**
-         * Speech SDKスクリプトを動的にロードし、ロード完了を待つPromiseを返します。
-         * これにより、setIntervalを使ったポーリングよりも確実な方法でSDKのロードを待つことができます。
-         */
-        function loadSpeechSDK() {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                // ★ 修正: ブラウザのセキュリティ機能(OpaqueResponseBlocking)によるブロックを回避するため、
-                // 適切なCORSヘッダーを返すパブリックCDN (jsDelivr) からスクリプトを読み込みます。
-                script.src = 'https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@latest/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle.min.js';
-                // スクリプトのロードが成功した場合
-                script.onload = () => {
-                    // SpeechSDK オブジェクトがグローバルに利用可能になったことを確認
-                    if (typeof SpeechSDK !== "undefined") {
-                        console.log("Speech SDK loaded successfully.");
-                        resolve();
-                    } else {
-                        reject(new Error("SpeechSDK object not found after script load."));
-                    }
-                };
-                // スクリプトのロードに失敗した場合 (ネットワークエラーなど)
-                script.onerror = (err) => {
-                    console.error("Failed to load Speech SDK script:", err);
-                    reject(new Error("Could not load the Speech SDK script. Check network connection, ad-blockers, or script URL."));
-                };
-                document.head.appendChild(script);
-            });
-        }
-
-        /**
-         * アプリケーションの初期化を行います。
-         * SDKの動的ロード、認証トークンの取得、UIのセットアップを含みます。
-         */
+        // アプリケーションの初期化
         async function initializeApp() {
             try {
-                updateStatus("SDKを読み込み中...", false);
-                // 新しいロード関数を呼び出し、完了を待つ
-                await loadSpeechSDK();
+                // SDKのロード (この部分は以前の修正で完璧です)
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@latest/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle.min.js';
+                    script.onload = () => resolve();
+                    script.onerror = (err) => reject(err);
+                    document.head.appendChild(script);
+                });
                 
+                // 認証トークンの取得 (Webアプリではキーを直接使わず、この方法が安全でベストプラクティスです)
                 updateStatus("認証中...", false);
                 const response = await fetch('/api/get-speech-token');
                 if (!response.ok) {
                     const err = await response.json();
-                    // サーバーからのエラーメッセージを優先的に表示
                     throw new Error(err.error || `Failed to get auth token (Status: ${response.status}).`);
                 }
                 const { token, region } = await response.json();
 
-                // SpeechSDKがロードされた後に設定を初期化
                 speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
                 speechConfig.speechRecognitionLanguage = "ja-JP";
 
-                // イベントリスナーをSDKのロード成功後に設定
-                addSpeakerButton.addEventListener('click', handleAddSpeaker);
-                speakerList.addEventListener('click', handleEnrollmentClick);
+                // イベントリスナーを設定
                 recordButton.addEventListener('click', handleRecordButtonClick);
 
-                updateStatus("録音準備完了", false);
+                updateStatus("準備完了。マイクボタンを押して開始してください。", false);
                 recordButton.disabled = false;
-                addSpeakerButton.disabled = false;
 
             } catch (error) {
                 console.error("Initialization Error:", error);
-                // ユーザーに分かりやすいエラーメッセージを表示
                 updateStatus(`エラー: 初期化に失敗しました。 ${error.message}`, true);
                 recordButton.disabled = true;
-                addSpeakerButton.disabled = true;
             }
         }
 
-        // DOMが完全に読み込まれてからアプリケーションの初期化を開始します。
-        // これにより、すべてのHTML要素が利用可能であることが保証されます。
-        document.addEventListener('DOMContentLoaded', initializeApp);
-
-        // --- イベントハンドラ関数 ---
-        async function handleAddSpeaker() {
-            const name = speakerNameInput.value.trim();
-            if (!name) {
-                alert("名前を入力してください。");
-                return;
-            }
-            setButtonLoading(addSpeakerButton, true);
-
-            try {
-                const response = await fetch('/api/speaker-profiles', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name })
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error || 'サーバーでエラーが発生しました。');
-                }
-                
-                const { profileId } = await response.json();
-                speakerProfiles.set(profileId, { name: name, enrolled: false });
-                speakerNameInput.value = '';
-                renderSpeakerList();
-            } catch (error) {
-                console.error("スピーカーの追加エラー:", error);
-                alert(`スピーカーの追加に失敗しました: ${error.message}`);
-            } finally {
-                setButtonLoading(addSpeakerButton, false, '追加');
-            }
-        }
-
-        async function handleEnrollmentClick(e) {
-            if (!e.target.classList.contains('enroll-button')) return;
-            
-            const button = e.target;
-            const profileId = button.dataset.profileId;
-            const speakerName = speakerProfiles.get(profileId).name;
-            
-            setButtonLoading(button, true);
-            enrollmentStatus.textContent = `「${speakerName}」さんを登録中...「Hey Cortana, what's the weather like?」と読み上げてください。`;
-            
-            try {
-                const audioBlob = await recordAudio(5000);
-                const response = await fetch(`/api/speaker-profiles`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/octet-stream',
-                        'X-Profile-Id': profileId
-                    },
-                    body: audioBlob
-                });
-
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || "登録に失敗しました。");
-                }
-                
-                const enrollmentResult = await response.json();
-                console.log("Enrollment result:", enrollmentResult);
-
-                speakerProfiles.get(profileId).enrolled = true;
-                enrollmentStatus.textContent = `「${speakerName}」さんの登録が完了しました！`;
-                renderSpeakerList();
-
-            } catch (error) {
-                console.error('登録失敗:', error);
-                enrollmentStatus.textContent = `登録に失敗しました: ${error.message}`;
-                setButtonLoading(button, false, '声を登録');
-            }
-        }
+        // 初期化を開始
+        initializeApp();
 
         function handleRecordButtonClick() {
             if (!isRecording) {
@@ -356,70 +234,37 @@
                 stopDiarization();
             }
         }
-        
-        function recordAudio(duration) {
-            return new Promise(async (resolve, reject) => {
-                try {
-                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        throw new Error('マイク機能がこのブラウザではサポートされていません。');
-                    }
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-                    const audioChunks = [];
 
-                    mediaRecorder.addEventListener("dataavailable", event => {
-                        audioChunks.push(event.data);
-                    });
-
-                    const stopRecording = () => {
-                        if (mediaRecorder.state === "recording") mediaRecorder.stop();
-                        stream.getTracks().forEach(track => track.stop());
-                    };
-                    
-                    mediaRecorder.addEventListener("stop", () => {
-                        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-                        resolve(audioBlob);
-                    });
-                    
-                    setTimeout(stopRecording, duration);
-                    mediaRecorder.start();
-                } catch(err) {
-                    reject(err);
-                }
-            });
-        }
-
-
-        // --- 主要なダイアライゼーションロジック ---
-        async function startDiarization() {
+        // --- 主要なダイアライゼーションロジック (更新) ---
+        function startDiarization() {
             if (isRecording || !speechConfig) return;
-            
+
             updateUIVisuals(true);
             updateStatus("サービスに接続中...");
 
+            // ★ 重要: ダイアライゼーションを有効にするためのプロパティ設定
+            speechConfig.setProperty(SpeechSDK.PropertyId.SpeechServiceResponse_RequestWordLevelTimestamps, "true");
+
             const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-            recognizer = new SpeechSDK.ConversationTranscriber(speechConfig, audioConfig);
             
+            // ★ 変更点: ConversationTranscriberの代わりにSpeechRecognizerを使用
+            recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+
+            // 以前の会話データをクリア
             conversationData.clear();
             speakerOrder = [];
             transcriptContainer.innerHTML = '';
-            
-            const conversation = await SpeechSDK.Conversation.createConversationAsync(speechConfig, "conversation1");
 
-            for(const [profileId, profile] of speakerProfiles.entries()){
-                if(profile.enrolled){
-                    const voiceProfile = SpeechSDK.VoiceProfile.fromSpeakerProfileId(profileId);
-                    await conversation.addParticipantByVoiceProfileAsync(profile.name, voiceProfile);
-                }
-            }
-            
-            await recognizer.joinConversationAsync(conversation);
-            
-            recognizer.sessionStarted = (s, e) => updateStatus("マイクに向かって話してください...");
+            // --- イベントハンドラを設定 ---
+            recognizer.sessionStarted = (s, e) => {
+                updateStatus("マイクに向かって話してください...");
+            };
+
             recognizer.sessionStopped = (s, e) => {
-                updateStatus("最終結果を処理中...");
+                updateStatus("セッションが停止しました。");
                 stopDiarization();
             };
+
             recognizer.canceled = (s, e) => {
                 let errorMessage = `キャンセルされました: ${e.reason}`;
                 if (e.reason === SpeechSDK.CancellationReason.Error) {
@@ -428,33 +273,41 @@
                 updateStatus(errorMessage, true);
                 stopDiarization();
             };
-            
-            recognizer.transcribed = (s, e) => {
+
+            // ★ 変更点: 'transcribed' の代わりに 'recognized' イベントを使用
+            recognizer.recognized = (s, e) => {
                 const result = e.result;
                 if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech && result.text) {
-                    const speakerName = result.speakerId;
+                    // result.speakerId は "Speaker 1" や "Speaker 2" のような文字列になります
+                    const speakerId = result.speakerId;
                     
-                    if (!conversationData.has(speakerName)) {
-                        conversationData.set(speakerName, []);
-                        speakerOrder.push(speakerName);
+                    if (!conversationData.has(speakerId)) {
+                        conversationData.set(speakerId, []);
+                        // 話者の登場順を保持
+                        speakerOrder.push(speakerId);
                     }
                     
-                    const utterances = conversationData.get(speakerName);
+                    const utterances = conversationData.get(speakerId);
                     utterances.push(result.text);
                     renderTranscript();
                 }
             };
-            
-            recognizer.startTranscribingAsync(() => {}, (err) => {
-                updateStatus(`エラー: ${err}`, true);
-                stopDiarization();
-            });
+
+            // 認識を開始
+            recognizer.startContinuousRecognitionAsync(
+                () => {}, 
+                (err) => {
+                    updateStatus(`エラー: ${err}`, true);
+                    stopDiarization();
+                }
+            );
         }
 
         function stopDiarization() {
             if (!recognizer) return;
             
-            recognizer.stopTranscribingAsync(
+            // ★ 変更点: stopTranscribingAsync の代わりに stopContinuousRecognitionAsync を使用
+            recognizer.stopContinuousRecognitionAsync(
                 () => {
                     recognizer.close();
                     recognizer = null;
@@ -463,45 +316,35 @@
                 },
                 (err) => {
                     console.error("認識エンジンの停止エラー:", err);
+                    recognizer.close();
+                    recognizer = null;
                     updateUIVisuals(false);
                     updateStatus(`停止エラー: ${err}`, true);
                 }
             );
         }
 
-        // --- UI更新ヘルパー関数 ---
-        function renderSpeakerList() {
-            speakerList.innerHTML = '';
-            for (const [profileId, profile] of speakerProfiles.entries()) {
-                const div = document.createElement('div');
-                div.className = 'speaker-item';
-                div.innerHTML = `
-                    <span>${profile.name}</span>
-                    ${profile.enrolled 
-                        ? '<span>✅ 登録済み</span>' 
-                        : `<button data-profile-id="${profileId}" class="enroll-button button enroll">声を登録</button>`}
-                `;
-                speakerList.appendChild(div);
-            }
-        }
-        
+        // --- UI更新ヘルパー関数 (一部変更) ---
         function renderTranscript() {
             transcriptContainer.innerHTML = '';
             
-            for (const speakerName of speakerOrder) {
-                const utterances = conversationData.get(speakerName);
+            // speakerOrder 配列を使って、話者が初めて登場した順番で表示
+            for (const speakerId of speakerOrder) {
+                const utterances = conversationData.get(speakerId);
                 if (!utterances || utterances.length === 0) continue;
 
                 const combinedText = utterances.join(' ');
                 
-                const alignClass = speakerOrder.indexOf(speakerName) % 2 === 0 ? 'align-left' : 'align-right';
+                // 話者ID（"Speaker 1", "Speaker 2"）に基づいて、交互に左右に配置
+                const speakerNumber = parseInt(speakerId.split(" ")[1] || "1");
+                const alignClass = speakerNumber % 2 !== 0 ? 'align-left' : 'align-right';
 
                 const bubbleContainer = document.createElement('div');
                 bubbleContainer.className = `speaker-bubble-container ${alignClass}`;
 
                 bubbleContainer.innerHTML = `
                     <div class="speaker-bubble">
-                        <p class="speaker-name">${speakerName}</p>
+                        <p class="speaker-name">${speakerId}</p>
                         <p>${combinedText}</p>
                     </div>
                 `;
@@ -520,15 +363,6 @@
         function updateStatus(text, isError = false) {
             statusEl.textContent = text;
             statusEl.classList.toggle('error', isError);
-        }
-        
-        function setButtonLoading(button, isLoading, text = '') {
-            button.disabled = isLoading;
-            if (isLoading) {
-                button.innerHTML = '<div class="spinner"></div>';
-            } else {
-                button.innerHTML = text;
-            }
         }
     </script>
 </body>
