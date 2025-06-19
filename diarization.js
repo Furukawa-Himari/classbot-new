@@ -6,7 +6,7 @@ const statusEl = document.getElementById('status');
 const transcriptContainer = document.getElementById('transcriptContainer');
 
 // --- Application State ---
-let recognizer = null;
+let conversationTranscriber = null;
 let isRecording = false;
 let conversationData = new Map();
 let speakerOrder = [];
@@ -67,75 +67,81 @@ function handleRecordButtonClick() {
 }
 
 /**
- * Starts the speech recognition and diarization process.
+ * Starts the conversation transcription and diarization process.
  */
 function startDiarization() {
-    console.log("1. startDiarization: Function called.");
-
     if (isRecording || !speechConfig) {
-        console.log("startDiarization: Exiting because already recording or speechConfig is not set.", { isRecording, speechConfig });
         return;
     }
 
     updateUIVisuals(true);
     updateStatus("Connecting to service...");
-    
-    try {
-        // Enable diarization in the speech configuration
-        speechConfig.setServiceProperty("diarization.enabled", "true", SpeechSDK.ServicePropertyChannel.UriQueryParameter);
-        console.log("2. startDiarization: 'diarization.enabled' property set.");
 
-        // Set up audio input from the default microphone
+    try {
+        // Set up audio input from the default microphone.
         const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
         if (!audioConfig) {
             throw new Error("Failed to create AudioConfig. Check microphone permissions.");
         }
-        console.log("3. startDiarization: AudioConfig created successfully.");
 
-        // Create the main SpeechRecognizer object
-        recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
-        if (!recognizer) {
-            throw new Error("Failed to create SpeechRecognizer.");
+        // Create the ConversationTranscriber. This class is essential for diarization.
+        conversationTranscriber = new SpeechSDK.ConversationTranscriber(speechConfig, audioConfig);
+        if (!conversationTranscriber) {
+            throw new Error("Failed to create ConversationTranscriber.");
         }
-        console.log("4. startDiarization: SpeechRecognizer created successfully.");
 
-        // Reset conversation data and UI
+        // Reset conversation data and UI for a new session.
         conversationData.clear();
         speakerOrder = [];
         transcriptContainer.innerHTML = '';
 
-        // --- Set up event handlers for the recognizer ---
-        recognizer.sessionStarted = (s, e) => { console.log("Event received: sessionStarted"); updateStatus("Listening... Speak into your microphone."); };
-        recognizer.sessionStopped = (s, e) => { console.log("Event received: sessionStopped"); updateStatus("Session stopped."); stopDiarization(); };
-        recognizer.canceled = (s, e) => { console.error("Event received: canceled", e); updateStatus(`Canceled: ${e.reason}`, true); stopDiarization(); };
+        // --- Set up event handlers for the ConversationTranscriber ---
+        conversationTranscriber.sessionStarted = (s, e) => {
+            console.log("SessionStarted event: ", e);
+            updateStatus("Listening... Speak into your microphone.");
+        };
         
-        // This event fires when a complete utterance is recognized
-        recognizer.recognized = (s, e) => {
-            console.log("Event received: recognized", e.result);
+        conversationTranscriber.sessionStopped = (s, e) => {
+            console.log("SessionStopped event: ", e);
+            updateStatus("Session stopped.");
+            stopDiarization();
+        };
+        
+        conversationTranscriber.canceled = (s, e) => {
+            console.error("Canceled event: ", e);
+            updateStatus(`Canceled: ${e.reason}. Error details: ${e.errorDetails}`, true);
+            stopDiarization();
+        };
+
+        // The 'transcribed' event is key. It provides the final recognition result with the speaker ID.
+        conversationTranscriber.transcribed = (s, e) => {
+            console.log("TRANSCRIBED: ", e.result);
             const result = e.result;
             if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech && result.text) {
-                const speakerId = result.speakerId;
-                // If this is a new speaker, add them to our data structures
+                // The Speaker ID will be "Guest-1", "Guest-2", etc.
+                const speakerId = result.speakerId || "Unknown";
+                
                 if (!conversationData.has(speakerId)) {
                     conversationData.set(speakerId, []);
                     speakerOrder.push(speakerId);
                 }
-                // Add the new text to the speaker's utterances
+                
                 const utterances = conversationData.get(speakerId);
                 utterances.push(result.text);
-                // Re-render the entire transcript
+                
+                // Re-render the entire transcript to show the new message.
                 renderTranscript();
             }
         };
-        
-        console.log("5. startDiarization: Calling startContinuousRecognitionAsync.");
-        recognizer.startContinuousRecognitionAsync(
+
+        // Start the transcription process.
+        conversationTranscriber.startTranscribingAsync(
             () => {
-                console.log("6. startContinuousRecognitionAsync: Started successfully.");
-            }, 
+                console.log("Conversation transcription started successfully.");
+            },
             (err) => {
-                console.error("7. startContinuousRecognitionAsync: Error on start.", err);
-                updateStatus(`Error: ${err}`, true);
+                console.error("Error starting conversation transcription: ", err);
+                updateStatus(`Error starting transcription: ${err}`, true);
                 stopDiarization();
             }
         );
@@ -147,26 +153,29 @@ function startDiarization() {
 }
 
 /**
- * Stops the speech recognition and diarization process.
+ * Stops the conversation transcription and diarization process.
  */
 function stopDiarization() {
-    if (!recognizer) {
+    if (!conversationTranscriber) {
+        // If already stopped or never started, ensure UI is correct and exit.
+        updateUIVisuals(false);
         return;
     }
-    // Create a local reference to the recognizer and set the global one to null
-    // to prevent race conditions or multiple stop calls.
-    const recognizerToStop = recognizer;
-    recognizer = null;
-    
-    recognizerToStop.stopContinuousRecognitionAsync(
+    // Create a local reference and nullify the global one to prevent race conditions.
+    const transcriberToStop = conversationTranscriber;
+    conversationTranscriber = null;
+
+    // Use stopTranscribingAsync for ConversationTranscriber.
+    transcriberToStop.stopTranscribingAsync(
         () => {
-            recognizerToStop.close();
+            transcriberToStop.close();
             updateUIVisuals(false);
             updateStatus("Recording stopped.");
+            console.log("Conversation transcription stopped successfully.");
         },
         (err) => {
-            console.error("Error stopping engine:", err);
-            recognizerToStop.close(); // Ensure it's closed even on error
+            console.error("Error stopping transcription:", err);
+            transcriberToStop.close(); // Ensure it's closed even on error.
             updateUIVisuals(false);
             updateStatus(`Stop Error: ${err}`, true);
         }
