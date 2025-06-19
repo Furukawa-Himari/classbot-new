@@ -304,21 +304,30 @@
         }
 
         function stopDiarization() {
-            if (!recognizer) return;
-            
-            // ★ 変更点: stopTranscribingAsync の代わりに stopContinuousRecognitionAsync を使用
-            recognizer.stopContinuousRecognitionAsync(
+            // ★ 修正: 複数の停止コマンドによる競合（レースコンディション）を防ぎます。
+
+            // グローバルなrecognizerが既に無ければ、停止処理は進行中か完了済みなので、何もしない。
+            if (!recognizer) {
+                return;
+            }
+
+            // グローバルなrecognizerをローカル変数に保存し、グローバル変数は即座にnullにする。
+            // これにより、以降のstopDiarization()呼び出しは、冒頭のif文で即座に終了するようになる。
+            const recognizerToStop = recognizer;
+            recognizer = null;
+
+            // 非同期の停止処理とクローズ処理は、ローカルに保存した参照に対して行う。
+            recognizerToStop.stopContinuousRecognitionAsync(
                 () => {
-                    recognizer.close();
-                    recognizer = null;
-                    updateUIVisuals(false);
+                    recognizerToStop.close();
+                    updateUIVisuals(false); // isRecording = false に設定
                     updateStatus("録音を停止しました。");
                 },
                 (err) => {
+                    // このエラーブロックが実行されても、ローカルのrecognizerToStopはnullではないため安全。
                     console.error("認識エンジンの停止エラー:", err);
-                    recognizer.close();
-                    recognizer = null;
-                    updateUIVisuals(false);
+                    recognizerToStop.close();
+                    updateUIVisuals(false); // isRecording = false に設定
                     updateStatus(`停止エラー: ${err}`, true);
                 }
             );
